@@ -28,7 +28,7 @@ Real-time browser-based transcription for any audio source. Works with police sc
 
 ## Live Demo
 
-Visit: https://arandomguyhere.github.io/baltimorescanner/
+Visit: https://arandomguyhere.github.io/ScannerTranscribe/
 
 ## Finding Feeds
 
