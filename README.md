@@ -27,13 +27,13 @@ Visit: https://arandomguyhere.github.io/baltimorescanner/
 
 - **Browser:** Chrome or Edge (required for tab audio capture)
 - **Internet:** Required for Broadcastify stream and first-time model download
-- **Storage:** ~40MB for Whisper model (cached in browser)
+- **Storage:** ~150MB for Whisper model (cached in browser)
 
 ## Technical Details
 
 - **Audio Capture:** `getDisplayMedia()` API for tab audio
-- **Transcription:** Whisper tiny.en model via [Transformers.js](https://huggingface.co/docs/transformers.js)
-- **Processing:** 5-second audio chunks processed in real-time
+- **Transcription:** Whisper base.en model via [Transformers.js](https://huggingface.co/docs/transformers.js)
+- **Processing:** 10-second audio chunks processed in real-time
 - **No Backend:** Everything runs client-side in WebAssembly
 
 ## Files

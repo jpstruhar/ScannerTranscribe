@@ -25,7 +25,7 @@ let mediaRecorder = null;
 let transcriptionInterval = null;
 
 // Settings
-const CHUNK_DURATION = 5000; // 5 seconds per chunk
+const CHUNK_DURATION = 10000; // 10 seconds per chunk for better context
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeAudioCapture();
@@ -238,13 +238,13 @@ async function loadWhisperModel() {
         loadModelBtn.disabled = true;
         loadModelBtn.textContent = 'Loading...';
         modelStatus.classList.add('loading');
-        modelStatusText.textContent = 'Whisper AI: Loading model (~40MB)...';
+        modelStatusText.textContent = 'Whisper AI: Loading model (~150MB)...';
         progressBar.style.display = 'block';
 
-        // Load Whisper tiny model (smallest, fastest)
+        // Load Whisper base model (better accuracy for radio audio)
         transcriber = await pipeline(
             'automatic-speech-recognition',
-            'Xenova/whisper-tiny.en',
+            'Xenova/whisper-base.en',
             {
                 progress_callback: (progress) => {
                     if (progress.status === 'downloading' || progress.status === 'progress') {
@@ -343,11 +343,13 @@ async function transcribeAudio(audioBlob) {
         // Get audio data as Float32Array
         const audioData = audioBuffer.getChannelData(0);
 
-        // Run transcription
+        // Run transcription with optimized settings for radio audio
         const result = await transcriber(audioData, {
             chunk_length_s: 30,
             stride_length_s: 5,
-            return_timestamps: false
+            return_timestamps: false,
+            language: 'english',
+            task: 'transcribe'
         });
 
         // Add result to transcript
