@@ -599,7 +599,7 @@ main {
 }
 
 .format-select option {
-    background: var(--bg-color);
+    background: var(--secondary-color);
     color: var(--text-color);
 }
 

@@ -590,9 +590,10 @@ function startDeepgramTranscription() {
 
     try {
         // Connect to Deepgram WebSocket
-        // Don't specify encoding - let Deepgram auto-detect from webm container
+        // Using nova-2-phonecall for better radio/phone audio handling
+        // utterances=true groups speech into complete phrases
         deepgramSocket = new WebSocket(
-            `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&punctuate=true`,
+            `wss://api.deepgram.com/v1/listen?model=nova-2-phonecall&language=en-US&smart_format=true&punctuate=true&utterances=true&utt_split=1.0`,
             ['token', deepgramApiKey]
         );
 
