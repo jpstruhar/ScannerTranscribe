@@ -480,6 +480,41 @@ main {
     color: var(--text-muted);
 }
 
+/* Download Group */
+.download-group {
+    display: flex;
+    gap: 0;
+}
+
+.format-select {
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-right: none;
+    border-radius: var(--border-radius) 0 0 var(--border-radius);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-color);
+    font-size: 0.85rem;
+    cursor: pointer;
+    outline: none;
+}
+
+.format-select:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.format-select:focus {
+    border-color: var(--accent-color);
+}
+
+.format-select option {
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.download-group .btn {
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+}
+
 .btn-small {
     padding: 6px 12px;
     font-size: 0.8rem;

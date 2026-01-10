@@ -695,25 +695,23 @@ function clearTranscript() {
 function downloadTranscript() {
     const container = document.getElementById('transcript-container');
     const entries = container.querySelectorAll('.transcript-entry');
+    const format = document.getElementById('download-format').value;
 
     if (entries.length === 0) {
         alert('No transcript to download.');
         return;
     }
 
-    // Build text content
-    let content = 'Baltimore Scanner Transcript\n';
-    content += `Downloaded: ${new Date().toLocaleString()}\n`;
-    content += `Engine: ${currentEngine === 'whisper' ? 'Whisper AI' : 'Deepgram'}\n`;
-    content += '='.repeat(50) + '\n\n';
-
+    // Collect entries data
+    const entriesData = [];
     entries.forEach(entry => {
-        const time = entry.querySelector('.transcript-time')?.textContent || '';
+        const time = entry.querySelector('.transcript-time')?.textContent?.replace(/[\[\]]/g, '') || '';
         const text = entry.querySelector('.transcript-text')?.textContent || '';
-        content += `${time} ${text}\n`;
+        entriesData.push({ time, text });
     });
 
-    // Add usage stats if available
+    // Calculate session stats
+    let sessionStats = null;
     if (totalSessionSeconds > 0 || sessionStartTime) {
         let seconds = totalSessionSeconds;
         if (sessionStartTime) {
@@ -721,18 +719,70 @@ function downloadTranscript() {
         }
         const minutes = Math.floor(seconds / 60);
         const secs = seconds % 60;
-        const cost = (seconds / 60 * 0.0043).toFixed(4);
-        content += '\n' + '='.repeat(50) + '\n';
-        content += `Session Duration: ${minutes}:${secs.toString().padStart(2, '0')}\n`;
-        content += `Estimated Cost: ~$${cost}\n`;
+        sessionStats = {
+            duration: `${minutes}:${secs.toString().padStart(2, '0')}`,
+            durationSeconds: seconds,
+            costEstimate: `$${(seconds / 60 * 0.0043).toFixed(4)}`
+        };
+    }
+
+    let content, mimeType, extension;
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    switch (format) {
+        case 'json':
+            content = JSON.stringify({
+                feed: 'Baltimore Scanner',
+                feedId: FEED_ID,
+                exported: new Date().toISOString(),
+                engine: currentEngine === 'whisper' ? 'Whisper AI' : 'Deepgram',
+                session: sessionStats,
+                entries: entriesData
+            }, null, 2);
+            mimeType = 'application/json';
+            extension = 'json';
+            break;
+
+        case 'csv':
+            content = 'Time,Text\n';
+            entriesData.forEach(entry => {
+                // Escape quotes in text
+                const escapedText = entry.text.replace(/"/g, '""');
+                content += `"${entry.time}","${escapedText}"\n`;
+            });
+            if (sessionStats) {
+                content += `\nSession Duration,${sessionStats.duration}\n`;
+                content += `Estimated Cost,${sessionStats.costEstimate}\n`;
+            }
+            mimeType = 'text/csv';
+            extension = 'csv';
+            break;
+
+        case 'txt':
+        default:
+            content = 'Baltimore Scanner Transcript\n';
+            content += `Downloaded: ${new Date().toLocaleString()}\n`;
+            content += `Engine: ${currentEngine === 'whisper' ? 'Whisper AI' : 'Deepgram'}\n`;
+            content += '='.repeat(50) + '\n\n';
+            entriesData.forEach(entry => {
+                content += `[${entry.time}] ${entry.text}\n`;
+            });
+            if (sessionStats) {
+                content += '\n' + '='.repeat(50) + '\n';
+                content += `Session Duration: ${sessionStats.duration}\n`;
+                content += `Estimated Cost: ~${sessionStats.costEstimate}\n`;
+            }
+            mimeType = 'text/plain';
+            extension = 'txt';
+            break;
     }
 
     // Create and download file
-    const blob = new Blob([content], { type: 'text/plain' });
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `baltimore-scanner-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `baltimore-scanner-${dateStr}.${extension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

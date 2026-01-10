@@ -61,9 +61,16 @@
                         <button id="clear-transcript" class="btn btn-secondary">
                             Clear
                         </button>
-                        <button id="download-transcript" class="btn btn-secondary">
-                            Download
-                        </button>
+                        <div class="download-group">
+                            <select id="download-format" class="format-select">
+                                <option value="txt">TXT</option>
+                                <option value="json">JSON</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                            <button id="download-transcript" class="btn btn-secondary">
+                                Download
+                            </button>
+                        </div>
                     </div>
                 </div>
 
