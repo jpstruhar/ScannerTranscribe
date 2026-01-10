@@ -47,6 +47,11 @@ let currentSessionId = null;
 const DB_NAME = 'ScannerTranscribeDB';
 const DB_VERSION = 1;
 
+// Map state
+let map = null;
+let mapMarkers = [];
+let markerIdCounter = 0;
+
 // Settings
 const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
@@ -70,6 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeDeepgram();
     initializeTranscriptionControls();
     initializeSessionHistory();
+    initializeMap();
 });
 
 // ============ Mobile Browser Detection ============
@@ -1349,10 +1355,14 @@ function addTranscriptEntry(text, confidence = null) {
         confidenceHtml = `<span class="transcript-confidence ${confClass}" title="Transcription confidence">${confPercent}%</span>`;
     }
 
+    // Store raw text for pin button (escape for JS string)
+    const rawTextEscaped = text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+
     entry.innerHTML = `
         <span class="transcript-time">[${time}]</span>
         ${confidenceHtml}
         <span class="transcript-text">${displayText}</span>
+        <button class="pin-btn" onclick="pinTranscriptLocation(this, '${rawTextEscaped}')" title="Pin location to map">📍</button>
     `;
 
     container.appendChild(entry);
@@ -1742,6 +1752,205 @@ async function clearAllSessions() {
         transaction.objectStore('entries').clear();
         transaction.oncomplete = () => resolve();
     });
+}
+
+// ============ Location Map ============
+
+function initializeMap() {
+    const mapContainer = document.getElementById('map-container');
+    const cityInput = document.getElementById('map-city');
+    const clearBtn = document.getElementById('clear-markers');
+
+    if (!mapContainer || typeof L === 'undefined') {
+        console.log('Map: Leaflet not available or container missing');
+        return;
+    }
+
+    // Load saved city
+    const savedCity = localStorage.getItem('map-city');
+    if (savedCity && cityInput) {
+        cityInput.value = savedCity;
+    }
+
+    // Initialize map centered on US (will re-center when first marker added)
+    map = L.map('map-container').setView([39.2904, -76.6122], 12); // Default: Baltimore
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+    }).addTo(map);
+
+    // Save city on change
+    if (cityInput) {
+        cityInput.addEventListener('change', (e) => {
+            localStorage.setItem('map-city', e.target.value);
+        });
+    }
+
+    // Clear markers button
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearAllMarkers);
+    }
+
+    console.log('Map initialized');
+}
+
+/**
+ * Geocode an address using OpenStreetMap Nominatim (free, no API key)
+ */
+async function geocodeAddress(address) {
+    const cityInput = document.getElementById('map-city');
+    const city = cityInput?.value || '';
+
+    // Append city for better geocoding
+    const fullAddress = city ? `${address}, ${city}` : address;
+
+    try {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}&limit=1`,
+            {
+                headers: {
+                    'User-Agent': 'ScannerTranscribe/1.0'
+                }
+            }
+        );
+
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+            return {
+                lat: parseFloat(data[0].lat),
+                lon: parseFloat(data[0].lon),
+                displayName: data[0].display_name
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Geocoding error:', error);
+        return null;
+    }
+}
+
+/**
+ * Add a marker to the map
+ */
+async function addMapMarker(text, time) {
+    if (!map) {
+        alert('Map not initialized');
+        return;
+    }
+
+    const location = await geocodeAddress(text);
+
+    if (!location) {
+        alert(`Could not find location for: "${text}"\n\nTry setting your city in the map section for better results.`);
+        return;
+    }
+
+    const markerId = ++markerIdCounter;
+    const marker = L.marker([location.lat, location.lon])
+        .addTo(map)
+        .bindPopup(`<b>${text}</b><br><small>${time}</small><br><small>${location.displayName}</small>`);
+
+    mapMarkers.push({
+        id: markerId,
+        marker: marker,
+        text: text,
+        time: time,
+        location: location
+    });
+
+    // Center map on new marker
+    map.setView([location.lat, location.lon], 15);
+    marker.openPopup();
+
+    // Update markers list
+    updateMarkersList();
+
+    return markerId;
+}
+
+/**
+ * Remove a marker from the map
+ */
+function removeMapMarker(markerId) {
+    const index = mapMarkers.findIndex(m => m.id === markerId);
+    if (index !== -1) {
+        map.removeLayer(mapMarkers[index].marker);
+        mapMarkers.splice(index, 1);
+        updateMarkersList();
+    }
+}
+
+/**
+ * Clear all markers from the map
+ */
+function clearAllMarkers() {
+    mapMarkers.forEach(m => map.removeLayer(m.marker));
+    mapMarkers = [];
+    updateMarkersList();
+}
+
+/**
+ * Update the markers list UI
+ */
+function updateMarkersList() {
+    const container = document.getElementById('map-markers-list');
+    if (!container) return;
+
+    if (mapMarkers.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 10px;">No locations pinned yet</p>';
+        return;
+    }
+
+    container.innerHTML = mapMarkers.map(m => `
+        <div class="marker-item" data-marker-id="${m.id}">
+            <div class="marker-info">
+                <div class="marker-address">${escapeHtml(m.text)}</div>
+                <div class="marker-time">${m.time}</div>
+            </div>
+            <div class="marker-actions">
+                <button onclick="focusMarker(${m.id})" title="Focus">🔍</button>
+                <button onclick="removeMapMarker(${m.id})" title="Remove">✕</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Focus on a specific marker
+ */
+function focusMarker(markerId) {
+    const markerData = mapMarkers.find(m => m.id === markerId);
+    if (markerData) {
+        map.setView([markerData.location.lat, markerData.location.lon], 16);
+        markerData.marker.openPopup();
+    }
+}
+
+/**
+ * Pin location from transcript entry
+ */
+async function pinTranscriptLocation(button, text) {
+    const time = new Date().toLocaleTimeString();
+    button.textContent = '⏳';
+    button.disabled = true;
+
+    try {
+        const markerId = await addMapMarker(text, time);
+        if (markerId) {
+            button.textContent = '📍';
+            button.classList.add('pinned');
+        } else {
+            button.textContent = '📍';
+        }
+    } catch (error) {
+        button.textContent = '📍';
+        console.error('Pin error:', error);
+    }
+
+    button.disabled = false;
 }
 
 // Log info
