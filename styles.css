@@ -1132,3 +1132,44 @@ footer a:hover {
     border-radius: 4px;
     margin-right: 10px;
 }
+
+/* Mobile Warning Banner */
+.mobile-warning {
+    background: linear-gradient(90deg, #f44336, #d32f2f);
+    color: white;
+    padding: 16px 20px;
+    text-align: center;
+    position: relative;
+}
+
+.mobile-warning-content {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.mobile-warning-content strong {
+    display: block;
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+}
+
+.mobile-warning-content p {
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    opacity: 0.95;
+}
+
+.mobile-warning-content button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: white;
+    padding: 8px 20px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s ease;
+}
+
+.mobile-warning-content button:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
