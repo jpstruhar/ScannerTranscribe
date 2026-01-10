@@ -20,35 +20,36 @@
                     <p class="feed-id">Feed ID: 40593</p>
                     <div class="status" id="status">
                         <span class="status-indicator"></span>
-                        <span class="status-text">Click to Listen</span>
+                        <span class="status-text">Ready</span>
                     </div>
                 </div>
 
-                <div class="player-container">
-                    <iframe
-                        id="broadcastify-player"
-                        src="https://www.broadcastify.com/webPlayer/40593"
-                        width="100%"
-                        height="180"
-                        frameborder="0"
-                        allow="autoplay"
-                        title="Baltimore Scanner Live Audio">
-                    </iframe>
+                <div class="audio-player" id="audio-player">
+                    <div class="audio-controls">
+                        <button id="capture-audio" class="btn btn-primary btn-large">
+                            Capture Tab Audio
+                        </button>
+                        <button id="stop-audio" class="btn btn-secondary" disabled>
+                            Stop
+                        </button>
+                    </div>
+                    <div class="audio-visualizer" id="audio-visualizer">
+                        <canvas id="visualizer-canvas"></canvas>
+                    </div>
+                    <div class="volume-control">
+                        <label for="volume">Volume:</label>
+                        <input type="range" id="volume" min="0" max="100" value="80">
+                        <span id="volume-value">80%</span>
+                    </div>
                 </div>
 
-                <div class="player-controls">
-                    <a href="https://www.broadcastify.com/webPlayer/40593"
-                       target="_blank"
-                       rel="noopener noreferrer"
-                       class="btn btn-primary">
-                        Open in Broadcastify
-                    </a>
-                    <a href="https://www.broadcastify.com/listen/feed/40593"
-                       target="_blank"
-                       rel="noopener noreferrer"
-                       class="btn btn-secondary">
-                        Feed Details
-                    </a>
+                <div class="player-instructions">
+                    <p><strong>How to use:</strong></p>
+                    <ol>
+                        <li>Open the <a href="https://www.broadcastify.com/webPlayer/40593" target="_blank" id="broadcastify-link">Broadcastify player</a> in a new tab and start playing</li>
+                        <li>Click "Capture Tab Audio" and select the Broadcastify tab</li>
+                        <li>Audio will play here with live transcription</li>
+                    </ol>
                 </div>
             </section>
 
@@ -69,15 +70,12 @@
                 </div>
                 <div class="transcript-status" id="transcript-status">
                     <span class="mic-indicator"></span>
-                    <span class="mic-status-text">Microphone Off</span>
+                    <span class="mic-status-text">Not listening</span>
                 </div>
                 <div class="transcript-container" id="transcript-container">
                     <p class="transcript-placeholder">
-                        Click "Start Transcription" to begin. Make sure your microphone can hear the scanner audio.
+                        Capture tab audio and start transcription to see live text.
                     </p>
-                </div>
-                <div class="transcript-note">
-                    <strong>Tip:</strong> Play the scanner through speakers and position your microphone nearby for best results.
                 </div>
             </section>
 
