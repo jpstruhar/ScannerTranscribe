@@ -13,7 +13,6 @@ const BROADCASTIFY_WEB_PLAYER = `https://www.broadcastify.com/webPlayer/${FEED_I
 let mediaStream = null;
 let audioContext = null;
 let analyser = null;
-let gainNode = null;
 let isCapturing = false;
 let animationId = null;
 
@@ -31,7 +30,6 @@ const CHUNK_DURATION = 5000; // 5 seconds per chunk
 document.addEventListener('DOMContentLoaded', () => {
     initializeAudioCapture();
     initializeTranscription();
-    initializeVolumeControl();
 });
 
 // ============ Audio Capture ============
@@ -69,19 +67,16 @@ async function startAudioCapture() {
         // Stop video track
         mediaStream.getVideoTracks().forEach(track => track.stop());
 
-        // Set up audio context for playback and visualization
+        // Set up audio context for visualization only (no playback - listen from original tab)
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         const source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
-
-        gainNode = audioContext.createGain();
-        gainNode.gain.value = document.getElementById('volume').value / 100;
 
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
 
-        source.connect(gainNode);
-        gainNode.connect(analyser);
-        analyser.connect(audioContext.destination);
+        // Only connect to analyser for visualization - NO playback to avoid echo
+        // User should listen to audio from the original Broadcastify tab
+        source.connect(analyser);
 
         // Set up MediaRecorder for transcription
         setupMediaRecorder(audioTracks);
@@ -164,7 +159,6 @@ function stopAudioCapture() {
 
     isCapturing = false;
     analyser = null;
-    gainNode = null;
     mediaRecorder = null;
 
     captureBtn.disabled = false;
@@ -209,19 +203,6 @@ function visualize() {
     }
 
     draw();
-}
-
-function initializeVolumeControl() {
-    const volumeSlider = document.getElementById('volume');
-    const volumeValue = document.getElementById('volume-value');
-
-    volumeSlider.addEventListener('input', (e) => {
-        const value = e.target.value;
-        volumeValue.textContent = `${value}%`;
-        if (gainNode) {
-            gainNode.gain.value = value / 100;
-        }
-    });
 }
 
 function updateStatus(statusElement, isLive, text) {
@@ -385,6 +366,12 @@ async function transcribeAudio(audioBlob) {
 }
 
 function isNoiseOrSilence(text) {
+    const trimmed = text.trim();
+
+    // Empty or very short
+    if (trimmed.length < 3) return true;
+
+    // Common noise patterns
     const noisePatterns = [
         /^\s*$/,
         /^\.+$/,
@@ -397,10 +384,39 @@ function isNoiseOrSilence(text) {
         /^hmm+$/i,
         /^thank you\.?$/i,
         /^thanks\.?$/i,
-        /^bye\.?$/i
+        /^bye\.?$/i,
+        /^hello\.?$/i,
+        /^hi\.?$/i,
+        /^the$/i,
+        /^a$/i,
+        /^I$/i,
+        /^it$/i,
+        /^is$/i,
     ];
 
-    return noisePatterns.some(pattern => pattern.test(text.trim()));
+    if (noisePatterns.some(pattern => pattern.test(trimmed))) {
+        return true;
+    }
+
+    // Detect repetitive patterns like "703.5.5.5.5..." or "1.1.1.1..."
+    // This happens when Whisper hallucinates on radio tones/static
+    if (/(\d+\.){4,}/.test(trimmed)) return true;
+    if (/(.)\1{5,}/.test(trimmed)) return true; // Same character repeated 6+ times
+
+    // Detect repeating word patterns like "the the the" or "5 5 5 5"
+    const words = trimmed.toLowerCase().split(/\s+/);
+    if (words.length >= 3) {
+        const uniqueWords = new Set(words);
+        // If more than 70% of words are the same, it's probably noise
+        if (uniqueWords.size === 1 || (words.length / uniqueWords.size) > 3) {
+            return true;
+        }
+    }
+
+    // Detect numeric spam like "5.5" repeated
+    if (/^[\d\.\s]+$/.test(trimmed) && trimmed.length > 10) return true;
+
+    return false;
 }
 
 function stopTranscription() {

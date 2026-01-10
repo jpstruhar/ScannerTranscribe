@@ -208,6 +208,19 @@ main {
     color: var(--accent-color);
 }
 
+.player-instructions .note {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(233, 69, 96, 0.1);
+    border-radius: var(--border-radius);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.player-instructions .note strong {
+    color: var(--accent-color);
+}
+
 .player-controls {
     display: flex;
     gap: 12px;
