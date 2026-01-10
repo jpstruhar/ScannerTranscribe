@@ -1124,34 +1124,13 @@ function startDeepgramTranscription() {
         // Connect to Deepgram WebSocket
         // Using nova-2-phonecall for optimized radio/phone audio handling
         // numerals=true outputs numbers as digits (123 not "one two three")
-        // Expanded keywords boost recognition of police/scanner terminology
+        // keywords boost recognition of police/scanner terminology
         const deepgramKeywords = [
-            // 10-codes (high priority)
-            '10-4:2', '10-97:2', '10-8:2', '10-7:2', '10-20:2', '10-23:2', '10-22:2',
-            '10-6:2', '10-9:2', '10-10:2', '10-15:2', '10-16:2', '10-17:2', '10-18:2',
-            '10-19:2', '10-21:2', '10-24:2', '10-25:2', '10-26:2', '10-27:2', '10-28:2',
-            '10-29:2', '10-30:2', '10-31:2', '10-32:2', '10-33:2', '10-34:2', '10-35:2',
-            // Core terminology
-            'CAD:2', 'unit:1', 'copy:1', 'responding:1', 'en route:1', 'dispatch:1',
-            'suspect:1', 'vehicle:1', 'subject:1', 'location:1', 'signal:1',
-            // Status codes
-            'code 1:2', 'code 2:2', 'code 3:2', 'code 4:2', 'priority:1',
-            // Phonetic alphabet - LAPD
+            '10-4:2', '10-97:2', '10-8:2', '10-7:2', '10-20:2',  // 10-codes with boost
+            'CAD:2', 'unit:1', 'copy:1', 'responding:1',
             'Adam:1', 'Boy:1', 'Charles:1', 'David:1', 'Edward:1', 'Frank:1',
-            'George:1', 'Henry:1', 'Ida:1', 'John:1', 'King:1', 'Lincoln:1',
-            'Mary:1', 'Nora:1', 'Ocean:1', 'Paul:1', 'Queen:1', 'Robert:1',
-            'Sam:1', 'Tom:1', 'Union:1', 'Victor:1', 'William:1', 'X-ray:1',
-            'Yellow:1', 'Zebra:1',
-            // Phonetic alphabet - NATO
-            'Alpha:1', 'Bravo:1', 'Charlie:1', 'Delta:1', 'Echo:1', 'Foxtrot:1',
-            'Golf:1', 'Hotel:1', 'India:1', 'Juliet:1', 'Kilo:1', 'Lima:1',
-            'Mike:1', 'November:1', 'Oscar:1', 'Papa:1', 'Quebec:1', 'Romeo:1',
-            'Sierra:1', 'Tango:1', 'Uniform:1', 'Whiskey:1', 'Yankee:1', 'Zulu:1',
-            // Common radio terms
-            'affirmative:1', 'negative:1', 'roger:1', 'wilco:1', 'stand by:1',
-            'disregard:1', 'clear:1', 'on scene:1', 'en route:1', 'arrived:1',
-            // Emergency terms
-            'ambulance:1', 'fire:1', 'backup:1', 'officer:1', 'deputy:1'
+            'George:1', 'Henry:1', 'Lincoln:1', 'Mary:1', 'Nora:1', 'Ocean:1',
+            'Paul:1', 'Robert:1', 'Sam:1', 'Tom:1', 'Victor:1', 'William:1'
         ].map(k => `keywords=${encodeURIComponent(k)}`).join('&');
 
         deepgramSocket = new WebSocket(
