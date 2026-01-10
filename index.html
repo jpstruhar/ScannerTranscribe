@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baltimore Scanner - Live Police & Fire Radio</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Baltimore Scanner</h1>
+            <p class="subtitle">Live Police, Fire & EMS Radio</p>
+        </header>
+
+        <main>
+            <section class="player-section">
+                <div class="feed-info">
+                    <h2>Baltimore City Police, Fire and EMS</h2>
+                    <p class="feed-id">Feed ID: 40593</p>
+                    <div class="status" id="status">
+                        <span class="status-indicator"></span>
+                        <span class="status-text">Click to Listen</span>
+                    </div>
+                </div>
+
+                <div class="player-container">
+                    <iframe
+                        id="broadcastify-player"
+                        src="https://www.broadcastify.com/webPlayer/40593"
+                        width="100%"
+                        height="180"
+                        frameborder="0"
+                        allow="autoplay"
+                        title="Baltimore Scanner Live Audio">
+                    </iframe>
+                </div>
+
+                <div class="player-controls">
+                    <a href="https://www.broadcastify.com/webPlayer/40593"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="btn btn-primary">
+                        Open in Broadcastify
+                    </a>
+                    <a href="https://www.broadcastify.com/listen/feed/40593"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="btn btn-secondary">
+                        Feed Details
+                    </a>
+                </div>
+            </section>
+
+            <section class="info-section">
+                <h3>About This Feed</h3>
+                <p>
+                    This feed provides live audio from Baltimore City emergency services
+                    including police dispatch, fire department, and emergency medical services.
+                </p>
+                <ul class="feed-details">
+                    <li><strong>Location:</strong> Baltimore, Maryland</li>
+                    <li><strong>Coverage:</strong> Police, Fire, EMS</li>
+                    <li><strong>Source:</strong> Broadcastify</li>
+                </ul>
+            </section>
+
+            <section class="instructions">
+                <h3>How to Listen</h3>
+                <ol>
+                    <li>Click the play button in the player above</li>
+                    <li>If the player doesn't load, click "Open in Broadcastify"</li>
+                    <li>You may need to create a free Broadcastify account</li>
+                </ol>
+            </section>
+        </main>
+
+        <footer>
+            <p>
+                Audio provided by <a href="https://www.broadcastify.com" target="_blank" rel="noopener noreferrer">Broadcastify</a>
+            </p>
+            <p class="disclaimer">
+                For informational purposes only. Not for emergency use.
+            </p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
