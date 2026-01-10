@@ -6,8 +6,6 @@
  * - Deepgram (Accurate, API Key)
  */
 
-import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
-
 const FEED_ID = 40593;
 const BROADCASTIFY_WEB_PLAYER = `https://www.broadcastify.com/webPlayer/${FEED_ID}`;
 
@@ -287,8 +285,13 @@ async function loadWhisperModel() {
     try {
         loadBtn.disabled = true;
         loadBtn.textContent = 'Loading...';
-        statusText.textContent = 'Whisper: Loading model (~150MB)...';
+        statusText.textContent = 'Whisper: Loading library...';
         progressBar.style.display = 'block';
+
+        // Dynamically import Transformers.js only when needed
+        const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1');
+
+        statusText.textContent = 'Whisper: Loading model (~150MB)...';
 
         transcriber = await pipeline(
             'automatic-speech-recognition',
