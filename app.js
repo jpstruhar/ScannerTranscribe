@@ -1,13 +1,10 @@
 /**
- * Baltimore Scanner - Live Police & Fire Radio
- * Broadcastify Feed ID: 40593
- * With Tab Audio Capture and Dual Transcription Engines:
- * - Whisper AI (Free, Local)
- * - Deepgram (Accurate, API Key)
+ * Scanner Transcribe - Real-time Radio to Text
+ * Browser-based transcription for any audio source
+ * Supports Whisper AI (local) and Deepgram (cloud)
  */
 
-const FEED_ID = 40593;
-const BROADCASTIFY_WEB_PLAYER = `https://www.broadcastify.com/webPlayer/${FEED_ID}`;
+const DEFAULT_FEED_ID = 40593;
 
 // Audio capture state
 let mediaStream = null;
@@ -37,16 +34,100 @@ let sessionStartTime = null;
 let totalSessionSeconds = 0;
 let usageInterval = null;
 
+// Keyword alerts
+let alertKeywords = [];
+
 // Settings
 const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
 document.addEventListener('DOMContentLoaded', () => {
+    initializeFeedInput();
+    initializeKeywords();
     initializeAudioCapture();
     initializeEngineSelector();
     initializeWhisper();
     initializeDeepgram();
     initializeTranscriptionControls();
 });
+
+// ============ Feed Input ============
+
+function initializeFeedInput() {
+    const feedInput = document.getElementById('feed-id');
+    const openBtn = document.getElementById('open-feed');
+
+    // Load saved feed ID
+    const savedFeedId = localStorage.getItem('feed-id');
+    if (savedFeedId) {
+        feedInput.value = savedFeedId;
+    }
+
+    openBtn.addEventListener('click', () => {
+        const feedId = feedInput.value.trim();
+        if (feedId) {
+            localStorage.setItem('feed-id', feedId);
+            const url = `https://www.broadcastify.com/webPlayer/${feedId}`;
+            window.open(url, '_blank');
+        } else {
+            alert('Please enter a feed ID');
+        }
+    });
+
+    feedInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            openBtn.click();
+        }
+    });
+}
+
+// ============ Keyword Alerts ============
+
+function initializeKeywords() {
+    const keywordInput = document.getElementById('keywords');
+
+    // Load saved keywords
+    const savedKeywords = localStorage.getItem('alert-keywords');
+    if (savedKeywords) {
+        keywordInput.value = savedKeywords;
+        parseKeywords(savedKeywords);
+    }
+
+    keywordInput.addEventListener('input', (e) => {
+        const value = e.target.value;
+        localStorage.setItem('alert-keywords', value);
+        parseKeywords(value);
+    });
+}
+
+function parseKeywords(value) {
+    alertKeywords = value
+        .split(',')
+        .map(k => k.trim().toLowerCase())
+        .filter(k => k.length > 0);
+}
+
+function checkForKeywords(text) {
+    if (alertKeywords.length === 0) return { hasKeyword: false, highlighted: text };
+
+    const lowerText = text.toLowerCase();
+    let hasKeyword = false;
+    let highlighted = text;
+
+    for (const keyword of alertKeywords) {
+        if (lowerText.includes(keyword)) {
+            hasKeyword = true;
+            // Highlight the keyword (case-insensitive)
+            const regex = new RegExp(`(${escapeRegex(keyword)})`, 'gi');
+            highlighted = highlighted.replace(regex, '<mark>$1</mark>');
+        }
+    }
+
+    return { hasKeyword, highlighted };
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // ============ Audio Capture ============
 
@@ -674,13 +755,43 @@ function addTranscriptEntry(text) {
     entry.className = 'transcript-entry';
     const time = new Date().toLocaleTimeString();
 
+    // Check for keyword alerts
+    const { hasKeyword, highlighted } = checkForKeywords(escapeHtml(text));
+
+    if (hasKeyword) {
+        entry.classList.add('alert');
+        // Play alert sound or notification
+        playAlertSound();
+    }
+
     entry.innerHTML = `
         <span class="transcript-time">[${time}]</span>
-        <span class="transcript-text">${escapeHtml(text)}</span>
+        <span class="transcript-text">${highlighted}</span>
     `;
 
     container.appendChild(entry);
     container.scrollTop = container.scrollHeight;
+}
+
+function playAlertSound() {
+    // Create a short beep sound
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.3;
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {
+        // Ignore audio errors
+    }
 }
 
 function clearTranscript() {
@@ -729,13 +840,16 @@ function downloadTranscript() {
     let content, mimeType, extension;
     const dateStr = new Date().toISOString().slice(0, 10);
 
+    const feedId = document.getElementById('feed-id')?.value || 'unknown';
+
     switch (format) {
         case 'json':
             content = JSON.stringify({
-                feed: 'Baltimore Scanner',
-                feedId: FEED_ID,
+                source: 'Scanner Transcribe',
+                feedId: feedId,
                 exported: new Date().toISOString(),
                 engine: currentEngine === 'whisper' ? 'Whisper AI' : 'Deepgram',
+                keywords: alertKeywords,
                 session: sessionStats,
                 entries: entriesData
             }, null, 2);
@@ -760,9 +874,13 @@ function downloadTranscript() {
 
         case 'txt':
         default:
-            content = 'Baltimore Scanner Transcript\n';
+            content = 'Scanner Transcribe - Transcript\n';
+            content += `Feed ID: ${feedId}\n`;
             content += `Downloaded: ${new Date().toLocaleString()}\n`;
             content += `Engine: ${currentEngine === 'whisper' ? 'Whisper AI' : 'Deepgram'}\n`;
+            if (alertKeywords.length > 0) {
+                content += `Keywords: ${alertKeywords.join(', ')}\n`;
+            }
             content += '='.repeat(50) + '\n\n';
             entriesData.forEach(entry => {
                 content += `[${entry.time}] ${entry.text}\n`;
@@ -782,7 +900,7 @@ function downloadTranscript() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `baltimore-scanner-${dateStr}.${extension}`;
+    a.download = `scanner-transcript-${feedId}-${dateStr}.${extension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -847,6 +965,6 @@ function resetUsage() {
 }
 
 // Log info
-console.log(`Baltimore Scanner - Feed ID: ${FEED_ID}`);
-console.log(`Open Broadcastify: ${BROADCASTIFY_WEB_PLAYER}`);
+console.log('Scanner Transcribe - Real-time Radio to Text');
+console.log('Supports Whisper AI (local) and Deepgram (cloud)');
 console.log('Transcription engines: Whisper AI (local) & Deepgram (API)');

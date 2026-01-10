@@ -1,37 +1,51 @@
-# Baltimore Scanner
+# Scanner Transcribe
 
-Live Police, Fire & EMS radio scanner for Baltimore City with real-time speech-to-text transcription.
+Real-time browser-based transcription for any audio source. Works with police scanners, radio streams, podcasts, or any browser tab playing audio.
 
 ## Features
 
 - **Dual Transcription Engines**
   - **Whisper AI** - Free, runs locally in browser (~150MB model)
   - **Deepgram** - Highly accurate, cloud-based ($200 free credit)
-- **Tab Audio Capture** - Capture audio directly from the Broadcastify browser tab
+- **Any Audio Source** - Works with any Broadcastify feed or browser tab
+- **Keyword Alerts** - Highlight and notify on specific words (shooting, fire, etc.)
+- **Tab Audio Capture** - Capture audio directly from any browser tab
 - **Audio Visualizer** - Real-time frequency visualization
-- **Usage Tracking** - Monitor transcription time and estimated cost (Deepgram)
+- **Usage Tracking** - Monitor transcription time and estimated cost
 - **Multi-Format Export** - Download transcripts as TXT, JSON, or CSV
-- **Privacy First** - Whisper processes entirely locally, no data sent to servers
+- **Settings Persistence** - Saves feed ID, API key, and keywords to localStorage
 
 ## How to Use
 
-1. Open the [Broadcastify player](https://www.broadcastify.com/webPlayer/40593) in a new tab and start playing
-2. Return to Baltimore Scanner and click **"Capture Tab Audio"**
-3. Select the Broadcastify tab and check **"Share tab audio"**
-4. Choose your transcription engine:
+1. Enter a Broadcastify feed ID and click "Open Feed", or open any audio source in another tab
+2. Click **"Capture Tab Audio"** and select the tab (check "Share tab audio")
+3. Choose your transcription engine:
    - **Whisper:** Click "Load Model" (one-time ~150MB download)
    - **Deepgram:** Enter your API key ([get $200 free credit](https://console.deepgram.com/signup))
+4. (Optional) Enter keywords to highlight in transcripts
 5. Click **"Start"** to begin transcription
-6. Use the format dropdown to download transcripts as TXT, JSON, or CSV
+6. Download transcripts as TXT, JSON, or CSV
 
 ## Live Demo
 
 Visit: https://arandomguyhere.github.io/baltimorescanner/
 
+## Finding Feeds
+
+- **Broadcastify:** Browse feeds at https://www.broadcastify.com/listen/
+- **Any Audio:** Works with podcasts, YouTube, Twitch, or any tab playing audio
+
+## Keyword Alerts
+
+Enter comma-separated keywords to highlight important entries:
+- Example: `shooting, fire, robbery, ambulance`
+- Matching entries are highlighted in red
+- Audio beep plays when keyword detected
+
 ## Requirements
 
 - **Browser:** Chrome or Edge (required for tab audio capture)
-- **Internet:** Required for Broadcastify stream
+- **Internet:** Required for audio streams and Deepgram
 - **Storage:** ~150MB for Whisper model (cached in browser)
 
 ## Transcription Engines
@@ -41,12 +55,12 @@ Visit: https://arandomguyhere.github.io/baltimorescanner/
 | Whisper AI | Good | Free | Local (browser) |
 | Deepgram Nova-2 | Excellent | ~$0.0043/min | Cloud API |
 
-**Deepgram** is recommended for police scanner audio due to better handling of radio noise and crosstalk.
+**Deepgram** is recommended for police scanner audio due to better handling of radio noise.
 
 ## Export Formats
 
-- **TXT** - Human-readable plain text with timestamps
-- **JSON** - Structured data for programmatic use
+- **TXT** - Human-readable with timestamps and keywords
+- **JSON** - Structured data including metadata and keyword list
 - **CSV** - Spreadsheet-compatible format
 
 ## Technical Details
@@ -54,7 +68,13 @@ Visit: https://arandomguyhere.github.io/baltimorescanner/
 - **Audio Capture:** `getDisplayMedia()` API for tab audio
 - **Whisper:** `whisper-base.en` model via [Transformers.js](https://huggingface.co/docs/transformers.js)
 - **Deepgram:** WebSocket streaming to Nova-2 model
-- **Audio Processing:** ScriptProcessorNode for Whisper, MediaRecorder for Deepgram
+- **Storage:** localStorage for settings persistence
+
+## Privacy
+
+- **Whisper:** All processing happens locally in your browser
+- **Deepgram:** Audio is sent to Deepgram's servers for processing
+- **No tracking:** No analytics or third-party tracking
 
 ## Files
 
@@ -64,4 +84,4 @@ Visit: https://arandomguyhere.github.io/baltimorescanner/
 
 ## Disclaimer
 
-For informational purposes only. Not for emergency use. Audio provided by [Broadcastify](https://www.broadcastify.com).
+For informational purposes only. Not for emergency use.

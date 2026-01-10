@@ -3,21 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Baltimore Scanner - Live Police & Fire Radio</title>
+    <title>Scanner Transcribe - Live Radio to Text</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Baltimore Scanner</h1>
-            <p class="subtitle">Live Police, Fire & EMS Radio</p>
+            <h1>Scanner Transcribe</h1>
+            <p class="subtitle">Real-time Radio to Text Transcription</p>
         </header>
 
         <main>
             <section class="player-section">
-                <div class="feed-info">
-                    <h2>Baltimore City Police, Fire and EMS</h2>
-                    <p class="feed-id">Feed ID: 40593</p>
+                <div class="feed-config">
+                    <h2>Audio Source</h2>
+                    <div class="feed-input-group">
+                        <label for="feed-id">Broadcastify Feed ID:</label>
+                        <input type="text" id="feed-id" value="40593" placeholder="e.g., 40593">
+                        <button id="open-feed" class="btn btn-secondary btn-small">Open Feed</button>
+                        <a href="https://www.broadcastify.com/listen/" target="_blank" class="help-link">Browse Feeds</a>
+                    </div>
+                    <p class="feed-hint">Enter any Broadcastify feed ID, or capture audio from any browser tab.</p>
                     <div class="status" id="status">
                         <span class="status-indicator"></span>
                         <span class="status-text">Ready</span>
@@ -41,8 +47,8 @@
                 <div class="player-instructions">
                     <p><strong>How to use:</strong></p>
                     <ol>
-                        <li>Open the <a href="https://www.broadcastify.com/webPlayer/40593" target="_blank">Broadcastify player</a> in a new tab and start playing</li>
-                        <li>Click "Capture Tab Audio" and select the Broadcastify tab (check "Share tab audio")</li>
+                        <li>Enter a feed ID and click "Open Feed", or open any audio source in another tab</li>
+                        <li>Click "Capture Tab Audio" and select the tab (check "Share tab audio")</li>
                         <li>Choose transcription engine and start transcription</li>
                     </ol>
                 </div>
@@ -113,6 +119,12 @@
                     </div>
                 </div>
 
+                <div class="keyword-config">
+                    <label for="keywords"><strong>Keyword Alerts:</strong></label>
+                    <input type="text" id="keywords" placeholder="e.g., shooting, fire, robbery (comma-separated)">
+                    <p class="keyword-hint">Entries containing these words will be highlighted</p>
+                </div>
+
                 <div class="transcript-status" id="transcript-status">
                     <span class="status-indicator"></span>
                     <span class="status-text">Capture audio first</span>
@@ -126,21 +138,21 @@
             </section>
 
             <section class="info-section">
-                <h3>About This Feed</h3>
+                <h3>About</h3>
                 <p>
-                    Live audio from Baltimore City emergency services including police dispatch,
-                    fire department, and emergency medical services.
+                    Browser-based real-time transcription for any audio source. Works with police scanners,
+                    radio streams, podcasts, or any browser tab playing audio.
                 </p>
                 <ul class="feed-details">
-                    <li><strong>Location:</strong> Baltimore, Maryland</li>
-                    <li><strong>Coverage:</strong> Police, Fire, EMS</li>
-                    <li><strong>Source:</strong> Broadcastify</li>
+                    <li><strong>Whisper AI:</strong> Free, runs locally in your browser</li>
+                    <li><strong>Deepgram:</strong> Cloud API, excellent accuracy ($200 free credit)</li>
+                    <li><strong>Privacy:</strong> Whisper processes entirely on your device</li>
                 </ul>
             </section>
         </main>
 
         <footer>
-            <p>Audio provided by <a href="https://www.broadcastify.com" target="_blank">Broadcastify</a></p>
+            <p>Audio sources provided by <a href="https://www.broadcastify.com" target="_blank">Broadcastify</a> and others</p>
             <p class="disclaimer">For informational purposes only. Not for emergency use.</p>
         </footer>
     </div>
