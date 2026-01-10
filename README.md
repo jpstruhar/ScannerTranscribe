@@ -15,6 +15,7 @@ Real-time browser-based transcription for any audio source. Works with police sc
 - **Audio Visualizer** - Real-time frequency visualization
 - **Usage Tracking** - Monitor transcription time and estimated cost (Deepgram)
 - **Multi-Format Export** - Download transcripts as TXT, JSON, or CSV
+- **Session Storage** - IndexedDB stores all transcripts locally for search and export
 - **Settings Persistence** - Saves feed ID, API key, and keywords locally
 
 ## How to Use
@@ -76,6 +77,7 @@ Enter comma-separated keywords to highlight important entries:
 - **Whisper:** `whisper-small.en` model via [Transformers.js](https://huggingface.co/docs/transformers.js) with police/scanner vocabulary prompts
 - **Deepgram:** WebSocket streaming with `nova-2-phonecall` model, keyword boosting, and confidence scoring
 - **Numeric Normalization:** Post-processing fixes spaced digits, +1 hallucinations, 10-codes, license plates, and CAD numbers
+- **Database:** IndexedDB for session and transcript storage with full-text search
 - **Storage:** localStorage for settings persistence
 
 ## Privacy & Redaction
