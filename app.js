@@ -23,8 +23,8 @@ let isTranscribing = false;
 // Whisper state
 let transcriber = null;
 let isWhisperLoaded = false;
-let whisperMediaRecorder = null;
-let audioChunks = [];
+let whisperAudioBuffer = [];
+let whisperProcessor = null;
 let transcriptionInterval = null;
 
 // Deepgram state
@@ -124,13 +124,22 @@ function setupMediaRecorders(audioTracks) {
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
 
-    // Whisper MediaRecorder (chunk-based)
-    whisperMediaRecorder = new MediaRecorder(stream, { mimeType });
-    whisperMediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-            audioChunks.push(event.data);
+    // Whisper: Use ScriptProcessorNode to capture raw PCM audio
+    // This gives us Float32Array data that Whisper can process directly
+    const whisperSource = audioContext.createMediaStreamSource(stream);
+    whisperProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+    whisperProcessor.onaudioprocess = (e) => {
+        if (isTranscribing && currentEngine === 'whisper') {
+            const inputData = e.inputBuffer.getChannelData(0);
+            // Copy the data since the buffer gets reused
+            whisperAudioBuffer.push(new Float32Array(inputData));
         }
     };
+
+    // Connect but don't output (silent)
+    whisperSource.connect(whisperProcessor);
+    whisperProcessor.connect(audioContext.destination);
 
     // Deepgram MediaRecorder (streaming)
     deepgramMediaRecorder = new MediaRecorder(stream, { mimeType });
@@ -148,7 +157,7 @@ function setupMediaRecorders(audioTracks) {
         }
     };
 
-    console.log('MediaRecorders initialized with mimeType:', mimeType);
+    console.log('Audio processors initialized. Whisper: ScriptProcessor, Deepgram:', mimeType);
 }
 
 function stopAudioCapture() {
@@ -183,7 +192,8 @@ function stopAudioCapture() {
 
     isCapturing = false;
     analyser = null;
-    whisperMediaRecorder = null;
+    whisperProcessor = null;
+    whisperAudioBuffer = [];
     deepgramMediaRecorder = null;
 
     captureBtn.disabled = false;
@@ -339,38 +349,39 @@ async function loadWhisperModel() {
 }
 
 async function startWhisperTranscription() {
-    if (!whisperMediaRecorder) return;
+    if (!whisperProcessor) {
+        console.error('Whisper: Audio processor not initialized');
+        return;
+    }
 
-    audioChunks = [];
-    whisperMediaRecorder.start();
+    whisperAudioBuffer = [];
+    console.log('Whisper transcription started, collecting audio...');
 
     transcriptionInterval = setInterval(async () => {
         if (!isTranscribing) return;
 
-        whisperMediaRecorder.stop();
-        await new Promise(resolve => setTimeout(resolve, 100));
+        if (whisperAudioBuffer.length > 0) {
+            // Combine all audio chunks into single Float32Array
+            const totalLength = whisperAudioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
+            const combinedAudio = new Float32Array(totalLength);
 
-        if (audioChunks.length > 0) {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            audioChunks = [];
-            await transcribeWithWhisper(audioBlob);
-        }
+            let offset = 0;
+            for (const chunk of whisperAudioBuffer) {
+                combinedAudio.set(chunk, offset);
+                offset += chunk.length;
+            }
 
-        if (isTranscribing && whisperMediaRecorder.state === 'inactive') {
-            whisperMediaRecorder.start();
+            whisperAudioBuffer = [];
+            console.log(`Whisper: Processing ${totalLength} samples (${(totalLength / 16000).toFixed(1)}s of audio)`);
+
+            await transcribeWithWhisper(combinedAudio);
         }
     }, WHISPER_CHUNK_DURATION);
 }
 
-async function transcribeWithWhisper(audioBlob) {
+async function transcribeWithWhisper(audioData) {
     try {
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        const tempContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-        const audioBuffer = await tempContext.decodeAudioData(arrayBuffer);
-        tempContext.close();
-
-        const audioData = audioBuffer.getChannelData(0);
-
+        // audioData is already a Float32Array at 16kHz
         const result = await transcriber(audioData, {
             chunk_length_s: 30,
             stride_length_s: 5,
@@ -381,6 +392,7 @@ async function transcribeWithWhisper(audioBlob) {
 
         if (result && result.text && result.text.trim()) {
             const text = result.text.trim();
+            console.log('Whisper raw result:', text);
             if (!isNoiseOrSilence(text)) {
                 addTranscriptEntry(text);
             }
@@ -396,12 +408,7 @@ function stopWhisperTranscription() {
         clearInterval(transcriptionInterval);
         transcriptionInterval = null;
     }
-
-    if (whisperMediaRecorder && whisperMediaRecorder.state !== 'inactive') {
-        whisperMediaRecorder.stop();
-    }
-
-    audioChunks = [];
+    whisperAudioBuffer = [];
 }
 
 function isNoiseOrSilence(text) {
