@@ -456,6 +456,30 @@ main {
     text-decoration: underline;
 }
 
+/* Usage Display */
+.usage-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(0, 200, 150, 0.1);
+    border: 1px solid rgba(0, 200, 150, 0.3);
+    border-radius: var(--border-radius);
+    margin-top: 8px;
+}
+
+.usage-time {
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--success-color);
+}
+
+.usage-cost {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
 .btn-small {
     padding: 6px 12px;
     font-size: 0.8rem;

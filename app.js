@@ -32,6 +32,11 @@ let deepgramSocket = null;
 let deepgramApiKey = '';
 let deepgramMediaRecorder = null;
 
+// Usage tracking
+let sessionStartTime = null;
+let totalSessionSeconds = 0;
+let usageInterval = null;
+
 // Settings
 const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
@@ -517,6 +522,9 @@ function startDeepgramTranscription() {
             // Start streaming audio chunks every 250ms
             deepgramMediaRecorder.start(250);
             console.log('MediaRecorder started, streaming to Deepgram');
+
+            // Start usage tracking
+            startUsageTracking();
         };
 
         deepgramSocket.onmessage = (event) => {
@@ -559,6 +567,9 @@ function startDeepgramTranscription() {
 }
 
 function stopDeepgramTranscription() {
+    // Stop usage tracking
+    stopUsageTracking();
+
     if (deepgramMediaRecorder && deepgramMediaRecorder.state !== 'inactive') {
         deepgramMediaRecorder.stop();
     }
@@ -683,6 +694,57 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ============ Usage Tracking ============
+
+function startUsageTracking() {
+    sessionStartTime = Date.now();
+    updateUsageDisplay();
+
+    usageInterval = setInterval(() => {
+        updateUsageDisplay();
+    }, 1000);
+}
+
+function stopUsageTracking() {
+    if (sessionStartTime) {
+        totalSessionSeconds += Math.floor((Date.now() - sessionStartTime) / 1000);
+        sessionStartTime = null;
+    }
+
+    if (usageInterval) {
+        clearInterval(usageInterval);
+        usageInterval = null;
+    }
+
+    updateUsageDisplay();
+}
+
+function updateUsageDisplay() {
+    const usageElement = document.getElementById('usage-display');
+    if (!usageElement) return;
+
+    let currentSeconds = totalSessionSeconds;
+    if (sessionStartTime) {
+        currentSeconds += Math.floor((Date.now() - sessionStartTime) / 1000);
+    }
+
+    const minutes = Math.floor(currentSeconds / 60);
+    const seconds = currentSeconds % 60;
+    const cost = (currentSeconds / 60 * 0.0043).toFixed(4);
+
+    usageElement.innerHTML = `
+        <span class="usage-time">${minutes}:${seconds.toString().padStart(2, '0')}</span>
+        <span class="usage-cost">~$${cost}</span>
+    `;
+    usageElement.style.display = 'flex';
+}
+
+function resetUsage() {
+    totalSessionSeconds = 0;
+    sessionStartTime = null;
+    updateUsageDisplay();
 }
 
 // Log info
