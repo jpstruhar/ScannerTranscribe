@@ -40,6 +40,14 @@ let alertKeywords = [];
 // Settings
 const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
+// Police/scanner vocabulary prompt to improve transcription accuracy
+// This guides the model toward correct terminology and numeric formats
+const SCANNER_VOCABULARY_PROMPT = `Police radio transcript. Unit numbers: Adam-12, Lincoln-42, 5-21, 3-14. ` +
+    `CAD numbers: 2024-001234, 2025-056789. License plates: 7ABC123, 8XYZ789. ` +
+    `Addresses: 1234 Main Street, 5678 Oak Avenue. ` +
+    `10-codes: 10-4, 10-97, 10-8, 10-7. Phonetic: Adam, Boy, Charles, David, Edward, Frank, George, Henry, Ida, John, King, Lincoln, Mary, Nora, Ocean, Paul, Queen, Robert, Sam, Tom, Union, Victor, William, X-ray, Yellow, Zebra. ` +
+    `Signal codes, badge numbers, and radio callsigns.`;
+
 document.addEventListener('DOMContentLoaded', () => {
     initializeFeedInput();
     initializeKeywords();
@@ -468,19 +476,24 @@ async function startWhisperTranscription() {
 async function transcribeWithWhisper(audioData) {
     try {
         // audioData is already a Float32Array at 16kHz
+        // Use initial_prompt to guide transcription toward police/scanner vocabulary
         const result = await transcriber(audioData, {
             chunk_length_s: 30,
             stride_length_s: 5,
             return_timestamps: false,
             language: 'english',
-            task: 'transcribe'
+            task: 'transcribe',
+            // Vocabulary prompt improves recognition of unit numbers, CAD, plates, etc.
+            initial_prompt: SCANNER_VOCABULARY_PROMPT
         });
 
         if (result && result.text && result.text.trim()) {
-            const text = result.text.trim();
-            console.log('Whisper raw result:', text);
-            if (!isNoiseOrSilence(text)) {
-                addTranscriptEntry(text);
+            const rawText = result.text.trim();
+            console.log('Whisper raw result:', rawText);
+            if (!isNoiseOrSilence(rawText)) {
+                const cleanedText = cleanupTranscription(rawText);
+                console.log('Whisper cleaned result:', cleanedText);
+                addTranscriptEntry(cleanedText);
             }
         }
 
@@ -545,6 +558,43 @@ function isNoiseOrSilence(text) {
     return false;
 }
 
+/**
+ * Post-process transcription to improve numeric accuracy
+ * Fixes common hallucinations and normalizes police/scanner terminology
+ */
+function cleanupTranscription(text) {
+    let cleaned = text;
+
+    // Remove hallucinated +1 country codes that appear mid-sentence or incorrectly
+    // Only keep +1 if it looks like an actual phone number (10 digits following)
+    cleaned = cleaned.replace(/\+1\s*(?![\d\s\-\(\)]{10,})/g, '');
+
+    // Remove standalone +1 at start of text (common hallucination)
+    cleaned = cleaned.replace(/^\+1\s+/g, '');
+
+    // Fix common numeric hallucinations: repeated digits with dots
+    cleaned = cleaned.replace(/(\d)\.(\d)\.(\d)\.(\d)/g, '$1$2$3$4');
+
+    // Normalize license plate patterns: space between letters and numbers
+    // e.g., "7ABC123" or "7 ABC 123" -> "7ABC123" (compact form)
+    cleaned = cleaned.replace(/([0-9])\s*([A-Z]{2,3})\s*([0-9]{3,4})/gi, '$1$2$3');
+
+    // Normalize unit numbers with dashes (e.g., "5 21" -> "5-21" when context suggests)
+    cleaned = cleaned.replace(/\b(unit|adam|lincoln|david|boy|charles)\s+(\d+)\s+(\d+)\b/gi, '$1 $2-$3');
+
+    // Fix common 10-code transcription errors
+    cleaned = cleaned.replace(/\bten\s*(\d+)\b/gi, '10-$1');
+    cleaned = cleaned.replace(/\b10\s+(\d+)\b/g, '10-$1');
+
+    // Normalize CAD number format: YYYY-NNNNNN
+    cleaned = cleaned.replace(/\bCAD\s*#?\s*(\d{4})\s*[-\s]?\s*(\d{4,8})\b/gi, 'CAD $1-$2');
+
+    // Clean up multiple spaces
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
+    return cleaned;
+}
+
 // ============ Deepgram Transcription ============
 
 function initializeDeepgram() {
@@ -591,9 +641,18 @@ function startDeepgramTranscription() {
     try {
         // Connect to Deepgram WebSocket
         // Using nova-2-phonecall for better radio/phone audio handling
-        // utterances=true groups speech into complete phrases
+        // numerals=true outputs numbers as digits (123 not "one two three")
+        // keywords boost recognition of police/scanner terminology
+        const deepgramKeywords = [
+            '10-4:2', '10-97:2', '10-8:2', '10-7:2', '10-20:2',  // 10-codes with boost
+            'CAD:2', 'unit:1', 'copy:1', 'responding:1', 'en route:1',
+            'Adam:1', 'Boy:1', 'Charles:1', 'David:1', 'Edward:1', 'Frank:1',
+            'George:1', 'Henry:1', 'Lincoln:1', 'Mary:1', 'Nora:1', 'Ocean:1',
+            'Paul:1', 'Robert:1', 'Sam:1', 'Tom:1', 'Victor:1', 'William:1'
+        ].map(k => `keywords=${encodeURIComponent(k)}`).join('&');
+
         deepgramSocket = new WebSocket(
-            `wss://api.deepgram.com/v1/listen?model=nova-2-phonecall&language=en-US&smart_format=true&punctuate=true&utterances=true&utt_split=1.0`,
+            `wss://api.deepgram.com/v1/listen?model=nova-2-phonecall&language=en-US&smart_format=true&punctuate=true&utterances=true&utt_split=1.0&numerals=true&${deepgramKeywords}`,
             ['token', deepgramApiKey]
         );
 
@@ -614,10 +673,14 @@ function startDeepgramTranscription() {
 
             // Log for debugging
             if (data.type === 'Results') {
-                const transcript = data.channel?.alternatives?.[0]?.transcript;
-                if (transcript && data.is_final) {
-                    console.log('Deepgram transcript:', transcript);
-                    addTranscriptEntry(transcript);
+                const rawTranscript = data.channel?.alternatives?.[0]?.transcript;
+                if (rawTranscript && data.is_final) {
+                    console.log('Deepgram raw transcript:', rawTranscript);
+                    const cleanedTranscript = cleanupTranscription(rawTranscript);
+                    console.log('Deepgram cleaned transcript:', cleanedTranscript);
+                    if (cleanedTranscript && !isNoiseOrSilence(cleanedTranscript)) {
+                        addTranscriptEntry(cleanedTranscript);
+                    }
                 }
             } else if (data.type === 'Metadata') {
                 console.log('Deepgram metadata:', data);
