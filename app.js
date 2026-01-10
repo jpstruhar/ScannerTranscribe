@@ -41,6 +41,12 @@ let alertKeywords = [];
 let redactionEnabled = false;
 let phoneticNormalizationEnabled = true;
 
+// Database state
+let db = null;
+let currentSessionId = null;
+const DB_NAME = 'ScannerTranscribeDB';
+const DB_VERSION = 1;
+
 // Settings
 const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
@@ -52,7 +58,8 @@ const SCANNER_VOCABULARY_PROMPT = `Police radio transcript. Unit numbers: Adam-1
     `10-codes: 10-4, 10-97, 10-8, 10-7. Phonetic: Adam, Boy, Charles, David, Edward, Frank, George, Henry, Ida, John, King, Lincoln, Mary, Nora, Ocean, Paul, Queen, Robert, Sam, Tom, Union, Victor, William, X-ray, Yellow, Zebra. ` +
     `Signal codes, badge numbers, and radio callsigns.`;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializeDatabase();
     initializeFeedInput();
     initializeKeywords();
     initializePrivacySettings();
@@ -61,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeWhisper();
     initializeDeepgram();
     initializeTranscriptionControls();
+    initializeSessionHistory();
 });
 
 // ============ Feed Input ============
@@ -276,6 +284,273 @@ function redactPII(text) {
     });
 
     return redacted;
+}
+
+// ============ IndexedDB Storage ============
+
+/**
+ * Initialize IndexedDB for persistent transcript storage
+ */
+async function initializeDatabase() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onerror = (event) => {
+            console.error('Database error:', event.target.error);
+            resolve(); // Continue without DB
+        };
+
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            console.log('Database initialized');
+            resolve();
+        };
+
+        request.onupgradeneeded = (event) => {
+            const database = event.target.result;
+
+            // Sessions store: metadata for each transcription session
+            if (!database.objectStoreNames.contains('sessions')) {
+                const sessionsStore = database.createObjectStore('sessions', { keyPath: 'id', autoIncrement: true });
+                sessionsStore.createIndex('startTime', 'startTime', { unique: false });
+                sessionsStore.createIndex('feedId', 'feedId', { unique: false });
+            }
+
+            // Entries store: individual transcript entries
+            if (!database.objectStoreNames.contains('entries')) {
+                const entriesStore = database.createObjectStore('entries', { keyPath: 'id', autoIncrement: true });
+                entriesStore.createIndex('sessionId', 'sessionId', { unique: false });
+                entriesStore.createIndex('timestamp', 'timestamp', { unique: false });
+                entriesStore.createIndex('text', 'text', { unique: false });
+            }
+
+            console.log('Database schema created');
+        };
+    });
+}
+
+/**
+ * Start a new transcription session
+ */
+async function startSession() {
+    if (!db) return null;
+
+    const feedId = document.getElementById('feed-id')?.value || 'unknown';
+
+    const session = {
+        startTime: new Date().toISOString(),
+        endTime: null,
+        feedId: feedId,
+        engine: currentEngine,
+        entryCount: 0
+    };
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(['sessions'], 'readwrite');
+        const store = transaction.objectStore('sessions');
+        const request = store.add(session);
+
+        request.onsuccess = () => {
+            currentSessionId = request.result;
+            console.log('Session started:', currentSessionId);
+            resolve(currentSessionId);
+        };
+
+        request.onerror = () => {
+            console.error('Failed to start session');
+            resolve(null);
+        };
+    });
+}
+
+/**
+ * End the current transcription session
+ */
+async function endSession() {
+    if (!db || !currentSessionId) return;
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['sessions'], 'readwrite');
+        const store = transaction.objectStore('sessions');
+        const request = store.get(currentSessionId);
+
+        request.onsuccess = () => {
+            const session = request.result;
+            if (session) {
+                session.endTime = new Date().toISOString();
+                store.put(session);
+            }
+            currentSessionId = null;
+            resolve();
+        };
+
+        request.onerror = () => resolve();
+    });
+}
+
+/**
+ * Store a transcript entry in the database
+ */
+async function storeTranscriptEntry(text, confidence = null) {
+    if (!db || !currentSessionId) return;
+
+    const entry = {
+        sessionId: currentSessionId,
+        timestamp: new Date().toISOString(),
+        text: text,  // Store raw text (before redaction)
+        confidence: confidence,
+        engine: currentEngine
+    };
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['entries', 'sessions'], 'readwrite');
+        const entriesStore = transaction.objectStore('entries');
+        const sessionsStore = transaction.objectStore('sessions');
+
+        const addRequest = entriesStore.add(entry);
+
+        addRequest.onsuccess = () => {
+            // Update session entry count
+            const getSession = sessionsStore.get(currentSessionId);
+            getSession.onsuccess = () => {
+                const session = getSession.result;
+                if (session) {
+                    session.entryCount = (session.entryCount || 0) + 1;
+                    sessionsStore.put(session);
+                }
+            };
+            resolve(addRequest.result);
+        };
+
+        addRequest.onerror = () => resolve(null);
+    });
+}
+
+/**
+ * Get all sessions from the database
+ */
+async function getAllSessions() {
+    if (!db) return [];
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['sessions'], 'readonly');
+        const store = transaction.objectStore('sessions');
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+            // Sort by start time, newest first
+            const sessions = request.result.sort((a, b) =>
+                new Date(b.startTime) - new Date(a.startTime)
+            );
+            resolve(sessions);
+        };
+
+        request.onerror = () => resolve([]);
+    });
+}
+
+/**
+ * Get all entries for a specific session
+ */
+async function getSessionEntries(sessionId) {
+    if (!db) return [];
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['entries'], 'readonly');
+        const store = transaction.objectStore('entries');
+        const index = store.index('sessionId');
+        const request = index.getAll(sessionId);
+
+        request.onsuccess = () => {
+            resolve(request.result.sort((a, b) =>
+                new Date(a.timestamp) - new Date(b.timestamp)
+            ));
+        };
+
+        request.onerror = () => resolve([]);
+    });
+}
+
+/**
+ * Search entries across all sessions
+ */
+async function searchEntries(query) {
+    if (!db || !query) return [];
+
+    const lowerQuery = query.toLowerCase();
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['entries'], 'readonly');
+        const store = transaction.objectStore('entries');
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+            const matches = request.result.filter(entry =>
+                entry.text.toLowerCase().includes(lowerQuery)
+            );
+            resolve(matches.sort((a, b) =>
+                new Date(b.timestamp) - new Date(a.timestamp)
+            ));
+        };
+
+        request.onerror = () => resolve([]);
+    });
+}
+
+/**
+ * Delete a session and all its entries
+ */
+async function deleteSession(sessionId) {
+    if (!db) return;
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['sessions', 'entries'], 'readwrite');
+
+        // Delete session
+        transaction.objectStore('sessions').delete(sessionId);
+
+        // Delete all entries for this session
+        const entriesStore = transaction.objectStore('entries');
+        const index = entriesStore.index('sessionId');
+        const request = index.openCursor(IDBKeyRange.only(sessionId));
+
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                cursor.delete();
+                cursor.continue();
+            }
+        };
+
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => resolve();
+    });
+}
+
+/**
+ * Get database statistics
+ */
+async function getDatabaseStats() {
+    if (!db) return { sessions: 0, entries: 0 };
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['sessions', 'entries'], 'readonly');
+
+        let sessionCount = 0;
+        let entryCount = 0;
+
+        transaction.objectStore('sessions').count().onsuccess = (e) => {
+            sessionCount = e.target.result;
+        };
+
+        transaction.objectStore('entries').count().onsuccess = (e) => {
+            entryCount = e.target.result;
+        };
+
+        transaction.oncomplete = () => {
+            resolve({ sessions: sessionCount, entries: entryCount });
+        };
+    });
 }
 
 // ============ Audio Capture ============
@@ -927,7 +1202,7 @@ function initializeTranscriptionControls() {
     downloadBtn.addEventListener('click', downloadTranscript);
 }
 
-function startTranscription() {
+async function startTranscription() {
     const startBtn = document.getElementById('start-transcription');
     const stopBtn = document.getElementById('stop-transcription');
     const transcriptStatus = document.getElementById('transcript-status');
@@ -947,6 +1222,9 @@ function startTranscription() {
         return;
     }
 
+    // Start a new database session
+    await startSession();
+
     isTranscribing = true;
 
     startBtn.disabled = true;
@@ -962,7 +1240,7 @@ function startTranscription() {
     }
 }
 
-function stopTranscription() {
+async function stopTranscription() {
     const startBtn = document.getElementById('start-transcription');
     const stopBtn = document.getElementById('stop-transcription');
     const transcriptStatus = document.getElementById('transcript-status');
@@ -974,6 +1252,12 @@ function stopTranscription() {
     } else if (currentEngine === 'deepgram') {
         stopDeepgramTranscription();
     }
+
+    // End the database session
+    await endSession();
+
+    // Refresh session history
+    await refreshSessionHistory();
 
     startBtn.disabled = !isCapturing || (currentEngine === 'whisper' && !isWhisperLoaded) || (currentEngine === 'deepgram' && !deepgramApiKey);
     stopBtn.disabled = true;
@@ -996,6 +1280,9 @@ function clearPlaceholder() {
 function addTranscriptEntry(text, confidence = null) {
     const container = document.getElementById('transcript-container');
     clearPlaceholder();
+
+    // Store raw text in database (before any processing)
+    storeTranscriptEntry(text, confidence);
 
     const entry = document.createElement('div');
     entry.className = 'transcript-entry';
@@ -1233,6 +1520,200 @@ function resetUsage() {
     totalSessionSeconds = 0;
     sessionStartTime = null;
     updateUsageDisplay();
+}
+
+// ============ Session History ============
+
+function initializeSessionHistory() {
+    const searchInput = document.getElementById('history-search');
+    const clearDbBtn = document.getElementById('clear-database');
+
+    if (searchInput) {
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                performSearch(e.target.value);
+            }, 300);
+        });
+    }
+
+    if (clearDbBtn) {
+        clearDbBtn.addEventListener('click', async () => {
+            if (confirm('Delete all stored sessions? This cannot be undone.')) {
+                await clearAllSessions();
+                await refreshSessionHistory();
+            }
+        });
+    }
+
+    // Initial load
+    refreshSessionHistory();
+}
+
+async function refreshSessionHistory() {
+    const container = document.getElementById('session-list');
+    const statsElement = document.getElementById('db-stats');
+    if (!container) return;
+
+    const sessions = await getAllSessions();
+    const stats = await getDatabaseStats();
+
+    if (statsElement) {
+        statsElement.textContent = `${stats.sessions} sessions, ${stats.entries} entries`;
+    }
+
+    if (sessions.length === 0) {
+        container.innerHTML = '<p class="no-sessions">No saved sessions yet. Start transcribing to save sessions.</p>';
+        return;
+    }
+
+    container.innerHTML = sessions.map(session => {
+        const startDate = new Date(session.startTime);
+        const dateStr = startDate.toLocaleDateString();
+        const timeStr = startDate.toLocaleTimeString();
+        const engine = session.engine === 'whisper' ? 'Whisper' : 'Deepgram';
+
+        return `
+            <div class="session-item" data-session-id="${session.id}">
+                <div class="session-info">
+                    <span class="session-date">${dateStr} ${timeStr}</span>
+                    <span class="session-meta">Feed: ${session.feedId} | ${engine} | ${session.entryCount || 0} entries</span>
+                </div>
+                <div class="session-actions">
+                    <button class="btn btn-small" onclick="viewSession(${session.id})">View</button>
+                    <button class="btn btn-small" onclick="exportSession(${session.id})">Export</button>
+                    <button class="btn btn-small btn-danger" onclick="confirmDeleteSession(${session.id})">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function viewSession(sessionId) {
+    const entries = await getSessionEntries(sessionId);
+    const sessions = await getAllSessions();
+    const session = sessions.find(s => s.id === sessionId);
+
+    if (!session) return;
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Session: ${new Date(session.startTime).toLocaleString()}</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="session-details">Feed: ${session.feedId} | Engine: ${session.engine} | Entries: ${entries.length}</p>
+                <div class="session-entries">
+                    ${entries.map(entry => {
+                        const time = new Date(entry.timestamp).toLocaleTimeString();
+                        const confBadge = entry.confidence !== null
+                            ? `<span class="conf-badge">${Math.round(entry.confidence * 100)}%</span>`
+                            : '';
+                        return `<div class="entry-row"><span class="entry-time">[${time}]</span>${confBadge}<span class="entry-text">${escapeHtml(entry.text)}</span></div>`;
+                    }).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+async function exportSession(sessionId) {
+    const entries = await getSessionEntries(sessionId);
+    const sessions = await getAllSessions();
+    const session = sessions.find(s => s.id === sessionId);
+
+    if (!session || entries.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+
+    const exportData = {
+        source: 'Scanner Transcribe',
+        exportedAt: new Date().toISOString(),
+        session: {
+            id: session.id,
+            feedId: session.feedId,
+            engine: session.engine,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            entryCount: entries.length
+        },
+        entries: entries.map(e => ({
+            timestamp: e.timestamp,
+            text: e.text,
+            confidence: e.confidence
+        }))
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `session-${session.feedId}-${new Date(session.startTime).toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+async function confirmDeleteSession(sessionId) {
+    if (confirm('Delete this session and all its entries?')) {
+        await deleteSession(sessionId);
+        await refreshSessionHistory();
+    }
+}
+
+async function performSearch(query) {
+    const container = document.getElementById('search-results');
+    if (!container) return;
+
+    if (!query || query.length < 2) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+    }
+
+    const results = await searchEntries(query);
+
+    if (results.length === 0) {
+        container.innerHTML = '<p class="no-results">No matches found.</p>';
+        container.style.display = 'block';
+        return;
+    }
+
+    container.innerHTML = `
+        <p class="search-count">${results.length} matches found</p>
+        ${results.slice(0, 50).map(entry => {
+            const time = new Date(entry.timestamp).toLocaleString();
+            const highlighted = entry.text.replace(
+                new RegExp(`(${escapeRegex(query)})`, 'gi'),
+                '<mark>$1</mark>'
+            );
+            return `<div class="search-result"><span class="result-time">${time}</span><span class="result-text">${highlighted}</span></div>`;
+        }).join('')}
+        ${results.length > 50 ? `<p class="search-more">...and ${results.length - 50} more</p>` : ''}
+    `;
+    container.style.display = 'block';
+}
+
+async function clearAllSessions() {
+    if (!db) return;
+
+    return new Promise((resolve) => {
+        const transaction = db.transaction(['sessions', 'entries'], 'readwrite');
+        transaction.objectStore('sessions').clear();
+        transaction.objectStore('entries').clear();
+        transaction.oncomplete = () => resolve();
+    });
 }
 
 // Log info
