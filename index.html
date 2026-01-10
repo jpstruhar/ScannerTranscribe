@@ -81,7 +81,7 @@
                 <div class="engine-config" id="whisper-config">
                     <div class="config-status" id="whisper-status">
                         <span class="status-text">Whisper: Not loaded</span>
-                        <button id="load-whisper" class="btn btn-small">Load Model (~150MB)</button>
+                        <button id="load-whisper" class="btn btn-small">Load Model (~466MB)</button>
                     </div>
                     <div class="progress-bar" id="whisper-progress" style="display: none;">
                         <div class="progress-fill" id="whisper-progress-fill"></div>
@@ -107,6 +107,21 @@
                     <label for="keywords"><strong>Keyword Alerts:</strong></label>
                     <input type="text" id="keywords" placeholder="e.g., shooting, fire, robbery (comma-separated)">
                     <p class="keyword-hint">Entries containing these words will be highlighted and trigger an alert sound</p>
+                </div>
+
+                <div class="privacy-config">
+                    <label><strong>Privacy &amp; Normalization:</strong></label>
+                    <div class="privacy-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="redaction-mode">
+                            <span>Redact PII (names, DOB, plates, addresses)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="phonetic-mode" checked>
+                            <span>Normalize phonetics (Adam Boy Charles → ABC)</span>
+                        </label>
+                    </div>
+                    <p class="privacy-hint">Redaction hides sensitive information. Original data is never stored.</p>
                 </div>
             </section>
 
@@ -157,9 +172,9 @@
                     radio streams, podcasts, or any browser tab playing audio.
                 </p>
                 <ul class="feed-details">
-                    <li><strong>Whisper AI:</strong> Free, runs locally in your browser (~150MB download)</li>
+                    <li><strong>Whisper AI:</strong> Free, runs locally in your browser (~466MB download)</li>
                     <li><strong>Deepgram:</strong> Cloud API, excellent accuracy for radio audio ($200 free credit)</li>
-                    <li><strong>Privacy:</strong> Whisper processes entirely on your device</li>
+                    <li><strong>Privacy:</strong> Whisper processes entirely on your device. Enable redaction to hide PII.</li>
                 </ul>
             </section>
         </main>

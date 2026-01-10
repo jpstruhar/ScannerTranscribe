@@ -78,6 +78,20 @@ Enter comma-separated keywords to highlight important entries:
 - **Numeric Normalization:** Post-processing fixes spaced digits, +1 hallucinations, 10-codes, license plates, and CAD numbers
 - **Storage:** localStorage for settings persistence
 
+## Privacy & Redaction
+
+Enable **Redact PII** to automatically hide sensitive information:
+- **[NAME]** - Names following "named", "subject", "driver", etc.
+- **[DOB]** - Dates of birth
+- **[SSN]** - Social security numbers
+- **[PHONE]** - Phone numbers
+- **[PLATE]** - License plates
+- **[ADDRESS]** - Street addresses
+
+Enable **Normalize Phonetics** to convert radio alphabet:
+- "Adam Boy Charles 123" → "ABC123"
+- Supports LAPD, NATO, and common police phonetics
+
 ## Accuracy Notes
 
 Transcription accuracy depends on audio quality. Common challenges with scanner audio:
