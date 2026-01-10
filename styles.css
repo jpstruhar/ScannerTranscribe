@@ -1173,3 +1173,144 @@ footer a:hover {
 .mobile-warning-content button:hover {
     background: rgba(255, 255, 255, 0.3);
 }
+
+/* Map Section */
+.map-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--border-radius);
+    padding: 24px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 20px;
+}
+
+.map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.map-header h2 {
+    margin: 0;
+}
+
+.map-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.city-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.city-input-group label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.city-input-group input {
+    padding: 6px 10px;
+    border-radius: var(--border-radius);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-color);
+    font-size: 0.85rem;
+    width: 150px;
+}
+
+.city-input-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.map-hint {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+}
+
+.map-container {
+    height: 350px;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    margin-bottom: 12px;
+}
+
+.markers-list {
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+}
+
+.marker-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--border-radius);
+    margin-bottom: 6px;
+}
+
+.marker-item:last-child {
+    margin-bottom: 0;
+}
+
+.marker-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.marker-address {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.marker-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.marker-actions button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+}
+
+.marker-actions button:hover {
+    color: var(--accent-color);
+}
+
+/* Pin button in transcript entries */
+.transcript-entry .pin-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    margin-left: 8px;
+}
+
+.transcript-entry .pin-btn:hover {
+    opacity: 1;
+}
+
+.transcript-entry .pin-btn.pinned {
+    opacity: 1;
+    color: var(--accent-color);
+}
