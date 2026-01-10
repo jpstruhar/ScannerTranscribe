@@ -135,10 +135,20 @@ function setupMediaRecorders(audioTracks) {
     // Deepgram MediaRecorder (streaming)
     deepgramMediaRecorder = new MediaRecorder(stream, { mimeType });
     deepgramMediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
-            deepgramSocket.send(event.data);
+        if (event.data.size > 0) {
+            if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+                deepgramSocket.send(event.data);
+                // Log first few chunks to verify streaming
+                if (!window._dgChunkCount) window._dgChunkCount = 0;
+                window._dgChunkCount++;
+                if (window._dgChunkCount <= 3) {
+                    console.log(`Deepgram: Sent audio chunk ${window._dgChunkCount}, size: ${event.data.size} bytes`);
+                }
+            }
         }
     };
+
+    console.log('MediaRecorders initialized with mimeType:', mimeType);
 }
 
 function stopAudioCapture() {
@@ -477,15 +487,19 @@ function initializeDeepgram() {
 }
 
 function startDeepgramTranscription() {
-    if (!deepgramApiKey || !deepgramMediaRecorder) return;
+    if (!deepgramApiKey || !deepgramMediaRecorder) {
+        console.error('Deepgram: Missing API key or MediaRecorder');
+        return;
+    }
 
     const statusElement = document.getElementById('deepgram-status');
     const statusText = statusElement.querySelector('.status-text');
 
     try {
         // Connect to Deepgram WebSocket
+        // Don't specify encoding - let Deepgram auto-detect from webm container
         deepgramSocket = new WebSocket(
-            `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&encoding=opus&sample_rate=16000`,
+            `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&punctuate=true`,
             ['token', deepgramApiKey]
         );
 
@@ -493,32 +507,40 @@ function startDeepgramTranscription() {
             console.log('Deepgram connected');
             statusText.textContent = 'Deepgram: Connected';
 
-            // Start streaming audio
-            deepgramMediaRecorder.start(250); // Send data every 250ms
+            // Start streaming audio chunks every 250ms
+            deepgramMediaRecorder.start(250);
+            console.log('MediaRecorder started, streaming to Deepgram');
         };
 
         deepgramSocket.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
-            if (data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
-                const transcript = data.channel.alternatives[0].transcript;
-
+            // Log for debugging
+            if (data.type === 'Results') {
+                const transcript = data.channel?.alternatives?.[0]?.transcript;
                 if (transcript && data.is_final) {
+                    console.log('Deepgram transcript:', transcript);
                     addTranscriptEntry(transcript);
                 }
+            } else if (data.type === 'Metadata') {
+                console.log('Deepgram metadata:', data);
             }
         };
 
         deepgramSocket.onerror = (error) => {
-            console.error('Deepgram error:', error);
+            console.error('Deepgram WebSocket error:', error);
             statusText.textContent = 'Deepgram: Connection error';
             stopTranscription();
         };
 
-        deepgramSocket.onclose = () => {
-            console.log('Deepgram disconnected');
+        deepgramSocket.onclose = (event) => {
+            console.log('Deepgram disconnected. Code:', event.code, 'Reason:', event.reason);
             if (isTranscribing && currentEngine === 'deepgram') {
-                statusText.textContent = 'Deepgram: Disconnected';
+                statusText.textContent = `Deepgram: Disconnected (${event.code})`;
+                // Try to reconnect if unexpected disconnect
+                if (event.code !== 1000 && event.code !== 1001) {
+                    console.log('Unexpected disconnect, check API key or audio stream');
+                }
             }
         };
 
