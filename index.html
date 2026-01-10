@@ -47,8 +47,8 @@
                     <p><strong>How to use:</strong></p>
                     <ol>
                         <li>Open the <a href="https://www.broadcastify.com/webPlayer/40593" target="_blank" id="broadcastify-link">Broadcastify player</a> in a new tab and start playing</li>
-                        <li>Click "Capture Tab Audio" and select the Broadcastify tab</li>
-                        <li>Audio will play here with live transcription</li>
+                        <li>Click "Capture Tab Audio" and select the Broadcastify tab (check "Share tab audio")</li>
+                        <li>Audio will play here with AI-powered transcription</li>
                     </ol>
                 </div>
             </section>
@@ -57,7 +57,7 @@
                 <div class="transcript-header">
                     <h3>Live Transcript</h3>
                     <div class="transcript-controls">
-                        <button id="start-transcription" class="btn btn-primary">
+                        <button id="start-transcription" class="btn btn-primary" disabled>
                             Start Transcription
                         </button>
                         <button id="stop-transcription" class="btn btn-secondary" disabled>
@@ -70,11 +70,20 @@
                 </div>
                 <div class="transcript-status" id="transcript-status">
                     <span class="mic-indicator"></span>
-                    <span class="mic-status-text">Not listening</span>
+                    <span class="mic-status-text">Capture audio first</span>
+                </div>
+                <div class="model-status" id="model-status">
+                    <div class="model-loading">
+                        <span class="model-status-text">Whisper AI: Not loaded</span>
+                        <button id="load-model" class="btn btn-small">Load Model</button>
+                    </div>
+                    <div class="progress-bar" id="progress-bar" style="display: none;">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
                 </div>
                 <div class="transcript-container" id="transcript-container">
                     <p class="transcript-placeholder">
-                        Capture tab audio and start transcription to see live text.
+                        Load the Whisper AI model, capture tab audio, then start transcription.
                     </p>
                 </div>
             </section>
@@ -89,6 +98,7 @@
                     <li><strong>Location:</strong> Baltimore, Maryland</li>
                     <li><strong>Coverage:</strong> Police, Fire, EMS</li>
                     <li><strong>Source:</strong> Broadcastify</li>
+                    <li><strong>Transcription:</strong> Whisper AI (runs locally in browser)</li>
                 </ul>
             </section>
         </main>
@@ -103,6 +113,6 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -1,8 +1,10 @@
 /**
  * Baltimore Scanner - Live Police & Fire Radio
  * Broadcastify Feed ID: 40593
- * With Tab Audio Capture and Speech-to-Text Transcription
+ * With Tab Audio Capture and Whisper AI Transcription
  */
+
+import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
 
 const FEED_ID = 40593;
 const BROADCASTIFY_WEB_PLAYER = `https://www.broadcastify.com/webPlayer/${FEED_ID}`;
@@ -15,14 +17,20 @@ let gainNode = null;
 let isCapturing = false;
 let animationId = null;
 
-// Speech Recognition
-let recognition = null;
-let isListening = false;
-let transcriptEntries = [];
+// Whisper transcription state
+let transcriber = null;
+let isModelLoaded = false;
+let isTranscribing = false;
+let audioChunks = [];
+let mediaRecorder = null;
+let transcriptionInterval = null;
+
+// Settings
+const CHUNK_DURATION = 5000; // 5 seconds per chunk
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeAudioCapture();
-    initializeSpeechRecognition();
+    initializeTranscription();
     initializeVolumeControl();
 });
 
@@ -40,99 +48,116 @@ async function startAudioCapture() {
     const captureBtn = document.getElementById('capture-audio');
     const stopBtn = document.getElementById('stop-audio');
     const statusElement = document.getElementById('status');
+    const startTranscriptionBtn = document.getElementById('start-transcription');
 
     try {
-        // Request tab audio capture
         mediaStream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,  // Required, but we'll ignore it
+            video: true,
             audio: {
                 echoCancellation: false,
                 noiseSuppression: false,
-                autoGainControl: false
+                autoGainControl: false,
+                sampleRate: 16000
             }
         });
 
-        // Check if we got audio
         const audioTracks = mediaStream.getAudioTracks();
         if (audioTracks.length === 0) {
-            throw new Error('No audio track captured. Make sure to check "Share tab audio" when selecting the tab.');
+            throw new Error('No audio track. Check "Share tab audio" when selecting.');
         }
 
-        // Stop video track (we only need audio)
+        // Stop video track
         mediaStream.getVideoTracks().forEach(track => track.stop());
 
-        // Set up audio context
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // Set up audio context for playback and visualization
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         const source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
 
-        // Create gain node for volume control
         gainNode = audioContext.createGain();
         gainNode.gain.value = document.getElementById('volume').value / 100;
 
-        // Create analyser for visualization
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
 
-        // Connect: source -> gain -> analyser -> destination
         source.connect(gainNode);
         gainNode.connect(analyser);
         analyser.connect(audioContext.destination);
 
+        // Set up MediaRecorder for transcription
+        setupMediaRecorder(audioTracks);
+
         isCapturing = true;
 
-        // Update UI
         captureBtn.disabled = true;
         stopBtn.disabled = false;
         updateStatus(statusElement, true, 'Capturing Audio');
 
-        // Start visualization
+        // Enable transcription button if model is loaded
+        if (isModelLoaded) {
+            startTranscriptionBtn.disabled = false;
+        }
+
         visualize();
 
-        // Handle stream end
-        audioTracks[0].addEventListener('ended', () => {
-            stopAudioCapture();
-        });
+        audioTracks[0].addEventListener('ended', stopAudioCapture);
 
-        console.log('Audio capture started');
+        updateTranscriptStatusText('Audio captured. Start transcription when ready.');
 
     } catch (error) {
         console.error('Error capturing audio:', error);
         updateStatus(statusElement, false, 'Capture Failed');
 
         if (error.name === 'NotAllowedError') {
-            alert('Permission denied. Please allow screen/tab sharing to capture audio.');
-        } else if (error.message.includes('No audio')) {
-            alert('No audio captured. When selecting a tab, make sure to check "Share tab audio" at the bottom of the dialog.');
+            alert('Permission denied. Please allow screen/tab sharing.');
         } else {
-            alert(`Error: ${error.message}`);
+            alert(`Error: ${error.message}\n\nMake sure to check "Share tab audio" when selecting the tab.`);
         }
     }
+}
+
+function setupMediaRecorder(audioTracks) {
+    const stream = new MediaStream(audioTracks);
+
+    // Try to use a supported format
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+    mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+            audioChunks.push(event.data);
+        }
+    };
 }
 
 function stopAudioCapture() {
     const captureBtn = document.getElementById('capture-audio');
     const stopBtn = document.getElementById('stop-audio');
     const statusElement = document.getElementById('status');
+    const startTranscriptionBtn = document.getElementById('start-transcription');
 
-    // Stop all tracks
+    // Stop transcription first
+    if (isTranscribing) {
+        stopTranscription();
+    }
+
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
     }
 
-    // Close audio context
     if (audioContext) {
         audioContext.close();
         audioContext = null;
     }
 
-    // Stop visualization
     if (animationId) {
         cancelAnimationFrame(animationId);
         animationId = null;
     }
 
-    // Clear canvas
     const canvas = document.getElementById('visualizer-canvas');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -140,20 +165,19 @@ function stopAudioCapture() {
     isCapturing = false;
     analyser = null;
     gainNode = null;
+    mediaRecorder = null;
 
-    // Update UI
     captureBtn.disabled = false;
     stopBtn.disabled = true;
+    startTranscriptionBtn.disabled = true;
     updateStatus(statusElement, false, 'Ready');
-
-    console.log('Audio capture stopped');
+    updateTranscriptStatusText('Capture audio first');
 }
 
 function visualize() {
     const canvas = document.getElementById('visualizer-canvas');
     const ctx = canvas.getContext('2d');
 
-    // Set canvas size
     canvas.width = canvas.offsetWidth * window.devicePixelRatio;
     canvas.height = canvas.offsetHeight * window.devicePixelRatio;
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
@@ -177,11 +201,8 @@ function visualize() {
 
         for (let i = 0; i < bufferLength; i++) {
             const barHeight = (dataArray[i] / 255) * height;
-
-            // Gradient from accent color to success color
             const hue = 340 + (dataArray[i] / 255) * 80;
             ctx.fillStyle = `hsl(${hue}, 70%, 55%)`;
-
             ctx.fillRect(x, height - barHeight, barWidth, barHeight);
             x += barWidth + 1;
         }
@@ -197,7 +218,6 @@ function initializeVolumeControl() {
     volumeSlider.addEventListener('input', (e) => {
         const value = e.target.value;
         volumeValue.textContent = `${value}%`;
-
         if (gainNode) {
             gainNode.gain.value = value / 100;
         }
@@ -206,218 +226,242 @@ function initializeVolumeControl() {
 
 function updateStatus(statusElement, isLive, text) {
     if (!statusElement) return;
-
     const statusText = statusElement.querySelector('.status-text');
-
-    if (isLive) {
-        statusElement.classList.add('live');
-    } else {
-        statusElement.classList.remove('live');
-    }
-
-    if (statusText && text) {
-        statusText.textContent = text;
-    }
+    statusElement.classList.toggle('live', isLive);
+    if (statusText && text) statusText.textContent = text;
 }
 
-// ============ Speech Recognition ============
+// ============ Whisper Transcription ============
 
-function initializeSpeechRecognition() {
+function initializeTranscription() {
+    const loadModelBtn = document.getElementById('load-model');
     const startBtn = document.getElementById('start-transcription');
     const stopBtn = document.getElementById('stop-transcription');
     const clearBtn = document.getElementById('clear-transcript');
-    const transcriptContainer = document.getElementById('transcript-container');
 
-    // Check for browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-        transcriptContainer.innerHTML = `
-            <p class="transcript-placeholder" style="color: var(--accent-color);">
-                Speech recognition is not supported in this browser.
-                Please use Chrome or Edge for transcription features.
-            </p>
-        `;
-        startBtn.disabled = true;
-        return;
-    }
-
-    // Initialize speech recognition
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    recognition.maxAlternatives = 1;
-
-    // Event handlers
-    recognition.onstart = () => {
-        isListening = true;
-        updateTranscriptStatus(true);
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        console.log('Speech recognition started');
-    };
-
-    recognition.onend = () => {
-        console.log('Speech recognition ended');
-        if (isListening) {
-            try {
-                recognition.start();
-            } catch (e) {
-                console.log('Could not restart recognition:', e);
-                stopTranscription();
-            }
-        } else {
-            updateTranscriptStatus(false);
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-        }
-    };
-
-    recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-
-        if (event.error === 'not-allowed') {
-            addTranscriptEntry('Microphone access denied. Please allow microphone access.', true);
-            stopTranscription();
-        } else if (event.error === 'no-speech') {
-            // Common, don't show error
-        } else if (event.error === 'audio-capture') {
-            addTranscriptEntry('No microphone found.', true);
-            stopTranscription();
-        }
-    };
-
-    recognition.onresult = (event) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-
-            if (event.results[i].isFinal) {
-                finalTranscript += transcript;
-            } else {
-                interimTranscript += transcript;
-            }
-        }
-
-        if (finalTranscript.trim()) {
-            addTranscriptEntry(finalTranscript.trim());
-        }
-
-        updateInterimTranscript(interimTranscript);
-    };
-
-    // Button handlers
+    loadModelBtn.addEventListener('click', loadWhisperModel);
     startBtn.addEventListener('click', startTranscription);
     stopBtn.addEventListener('click', stopTranscription);
     clearBtn.addEventListener('click', clearTranscript);
 }
 
-function startTranscription() {
-    if (!recognition) return;
+async function loadWhisperModel() {
+    const modelStatus = document.getElementById('model-status');
+    const modelStatusText = modelStatus.querySelector('.model-status-text');
+    const loadModelBtn = document.getElementById('load-model');
+    const progressBar = document.getElementById('progress-bar');
+    const progressFill = document.getElementById('progress-fill');
+    const startTranscriptionBtn = document.getElementById('start-transcription');
 
     try {
-        recognition.start();
-        clearPlaceholder();
-    } catch (e) {
-        console.error('Could not start recognition:', e);
-        if (e.message.includes('already started')) {
-            recognition.stop();
-            setTimeout(() => recognition.start(), 100);
+        loadModelBtn.disabled = true;
+        loadModelBtn.textContent = 'Loading...';
+        modelStatus.classList.add('loading');
+        modelStatusText.textContent = 'Whisper AI: Loading model (~40MB)...';
+        progressBar.style.display = 'block';
+
+        // Load Whisper tiny model (smallest, fastest)
+        transcriber = await pipeline(
+            'automatic-speech-recognition',
+            'Xenova/whisper-tiny.en',
+            {
+                progress_callback: (progress) => {
+                    if (progress.status === 'downloading' || progress.status === 'progress') {
+                        const percent = progress.progress || 0;
+                        progressFill.style.width = `${percent}%`;
+                        modelStatusText.textContent = `Whisper AI: Downloading ${Math.round(percent)}%`;
+                    } else if (progress.status === 'ready') {
+                        progressFill.style.width = '100%';
+                    }
+                }
+            }
+        );
+
+        isModelLoaded = true;
+        modelStatus.classList.remove('loading');
+        modelStatus.classList.add('loaded');
+        modelStatusText.textContent = 'Whisper AI: Ready';
+        loadModelBtn.style.display = 'none';
+        progressBar.style.display = 'none';
+
+        // Enable transcription if audio is being captured
+        if (isCapturing) {
+            startTranscriptionBtn.disabled = false;
         }
+
+        updateTranscriptStatusText('Model loaded. Start transcription when ready.');
+
+    } catch (error) {
+        console.error('Error loading Whisper model:', error);
+        modelStatus.classList.remove('loading');
+        modelStatusText.textContent = 'Whisper AI: Failed to load';
+        loadModelBtn.disabled = false;
+        loadModelBtn.textContent = 'Retry';
+        progressBar.style.display = 'none';
+        alert(`Failed to load Whisper model: ${error.message}`);
     }
 }
 
-function stopTranscription() {
-    isListening = false;
-    if (recognition) {
-        recognition.stop();
+async function startTranscription() {
+    if (!isModelLoaded || !isCapturing || !mediaRecorder) {
+        alert('Please load the model and capture audio first.');
+        return;
     }
-    updateTranscriptStatus(false);
 
     const startBtn = document.getElementById('start-transcription');
     const stopBtn = document.getElementById('stop-transcription');
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
+    const transcriptStatus = document.getElementById('transcript-status');
 
-    removeInterimTranscript();
+    isTranscribing = true;
+    audioChunks = [];
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    transcriptStatus.classList.add('listening');
+    updateTranscriptStatusText('Transcribing...');
+    clearPlaceholder();
+
+    // Start recording
+    mediaRecorder.start();
+
+    // Process audio every CHUNK_DURATION
+    transcriptionInterval = setInterval(async () => {
+        if (!isTranscribing) return;
+
+        // Stop and restart to get chunks
+        mediaRecorder.stop();
+
+        // Wait for data
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        if (audioChunks.length > 0) {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            audioChunks = [];
+
+            // Process the audio
+            await transcribeAudio(audioBlob);
+        }
+
+        // Restart recording if still transcribing
+        if (isTranscribing && mediaRecorder.state === 'inactive') {
+            mediaRecorder.start();
+        }
+    }, CHUNK_DURATION);
 }
 
-function updateTranscriptStatus(listening) {
-    const transcriptStatus = document.getElementById('transcript-status');
-    const statusText = transcriptStatus.querySelector('.mic-status-text');
+async function transcribeAudio(audioBlob) {
+    try {
+        // Convert blob to array buffer
+        const arrayBuffer = await audioBlob.arrayBuffer();
 
-    if (listening) {
-        transcriptStatus.classList.add('listening');
-        statusText.textContent = 'Listening via microphone...';
-    } else {
-        transcriptStatus.classList.remove('listening');
-        statusText.textContent = 'Not listening';
+        // Decode audio
+        const tempContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        const audioBuffer = await tempContext.decodeAudioData(arrayBuffer);
+        tempContext.close();
+
+        // Get audio data as Float32Array
+        const audioData = audioBuffer.getChannelData(0);
+
+        // Run transcription
+        const result = await transcriber(audioData, {
+            chunk_length_s: 30,
+            stride_length_s: 5,
+            return_timestamps: false
+        });
+
+        // Add result to transcript
+        if (result && result.text && result.text.trim()) {
+            const text = result.text.trim();
+            // Filter out common noise/silence transcriptions
+            if (!isNoiseOrSilence(text)) {
+                addTranscriptEntry(text);
+            }
+        }
+
+    } catch (error) {
+        console.error('Transcription error:', error);
+        // Don't show error for every chunk, just log it
     }
+}
+
+function isNoiseOrSilence(text) {
+    const noisePatterns = [
+        /^\s*$/,
+        /^\.+$/,
+        /^\[.*\]$/,
+        /^you$/i,
+        /^yeah$/i,
+        /^okay$/i,
+        /^um+$/i,
+        /^uh+$/i,
+        /^hmm+$/i,
+        /^thank you\.?$/i,
+        /^thanks\.?$/i,
+        /^bye\.?$/i
+    ];
+
+    return noisePatterns.some(pattern => pattern.test(text.trim()));
+}
+
+function stopTranscription() {
+    const startBtn = document.getElementById('start-transcription');
+    const stopBtn = document.getElementById('stop-transcription');
+    const transcriptStatus = document.getElementById('transcript-status');
+
+    isTranscribing = false;
+
+    if (transcriptionInterval) {
+        clearInterval(transcriptionInterval);
+        transcriptionInterval = null;
+    }
+
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+
+    audioChunks = [];
+
+    startBtn.disabled = !isCapturing || !isModelLoaded;
+    stopBtn.disabled = true;
+    transcriptStatus.classList.remove('listening');
+    updateTranscriptStatusText(isCapturing ? 'Paused' : 'Capture audio first');
+}
+
+function updateTranscriptStatusText(text) {
+    const statusText = document.querySelector('.mic-status-text');
+    if (statusText) statusText.textContent = text;
 }
 
 function clearPlaceholder() {
     const container = document.getElementById('transcript-container');
     const placeholder = container.querySelector('.transcript-placeholder');
-    if (placeholder) {
-        placeholder.remove();
-    }
+    if (placeholder) placeholder.remove();
 }
 
-function addTranscriptEntry(text, isError = false) {
+function addTranscriptEntry(text) {
     const container = document.getElementById('transcript-container');
     clearPlaceholder();
 
     const entry = document.createElement('div');
     entry.className = 'transcript-entry';
-
     const time = new Date().toLocaleTimeString();
 
     entry.innerHTML = `
         <span class="transcript-time">[${time}]</span>
-        <span class="transcript-text" style="${isError ? 'color: var(--accent-color);' : ''}">${escapeHtml(text)}</span>
+        <span class="transcript-text">${escapeHtml(text)}</span>
     `;
 
     container.appendChild(entry);
     container.scrollTop = container.scrollHeight;
-
-    transcriptEntries.push({ time, text, isError });
-}
-
-function updateInterimTranscript(text) {
-    const container = document.getElementById('transcript-container');
-    removeInterimTranscript();
-
-    if (text.trim()) {
-        const interim = document.createElement('div');
-        interim.className = 'transcript-entry interim-entry';
-        interim.innerHTML = `
-            <span class="transcript-time">[...]</span>
-            <span class="transcript-text interim">${escapeHtml(text)}</span>
-        `;
-        container.appendChild(interim);
-        container.scrollTop = container.scrollHeight;
-    }
-}
-
-function removeInterimTranscript() {
-    const container = document.getElementById('transcript-container');
-    const interim = container.querySelector('.interim-entry');
-    if (interim) {
-        interim.remove();
-    }
 }
 
 function clearTranscript() {
     const container = document.getElementById('transcript-container');
     container.innerHTML = `
         <p class="transcript-placeholder">
-            Capture tab audio and start transcription to see live text.
+            Load the Whisper AI model, capture tab audio, then start transcription.
         </p>
     `;
-    transcriptEntries = [];
 }
 
 function escapeHtml(text) {
@@ -429,4 +473,4 @@ function escapeHtml(text) {
 // Log info
 console.log(`Baltimore Scanner - Feed ID: ${FEED_ID}`);
 console.log(`Open Broadcastify: ${BROADCASTIFY_WEB_PLAYER}`);
-console.log('Tab audio capture and speech-to-text enabled');
+console.log('Whisper AI transcription enabled');
