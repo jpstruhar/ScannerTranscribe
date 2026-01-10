@@ -405,11 +405,13 @@ async function loadWhisperModel() {
         // Dynamically import Transformers.js only when needed
         const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1');
 
-        statusText.textContent = 'Whisper: Loading model (~150MB)...';
+        // Using whisper-small.en for better accuracy (especially numbers)
+        // Larger model (~466MB) but significantly more accurate than base
+        statusText.textContent = 'Whisper: Loading model (~466MB)...';
 
         transcriber = await pipeline(
             'automatic-speech-recognition',
-            'Xenova/whisper-base.en',
+            'Xenova/whisper-small.en',
             {
                 progress_callback: (progress) => {
                     if (progress.status === 'downloading' || progress.status === 'progress') {
@@ -565,6 +567,22 @@ function isNoiseOrSilence(text) {
 function cleanupTranscription(text) {
     let cleaned = text;
 
+    // === AGGRESSIVE DIGIT NORMALIZATION ===
+
+    // Collapse spaced single digits: "2 2 0 1" -> "2201", "5 2 0 1" -> "5201"
+    // This is the most common numeric corruption pattern
+    cleaned = cleaned.replace(/\b(\d)\s+(\d)\s+(\d)\s+(\d)\s+(\d)\s+(\d)\b/g, '$1$2$3$4$5$6');
+    cleaned = cleaned.replace(/\b(\d)\s+(\d)\s+(\d)\s+(\d)\s+(\d)\b/g, '$1$2$3$4$5');
+    cleaned = cleaned.replace(/\b(\d)\s+(\d)\s+(\d)\s+(\d)\b/g, '$1$2$3$4');
+    cleaned = cleaned.replace(/\b(\d)\s+(\d)\s+(\d)\b/g, '$1$2$3');
+
+    // Collapse digits separated by periods (IP-like hallucinations): "6.0.6.2.0.1" -> "606201"
+    cleaned = cleaned.replace(/\b(\d)\.(\d)\.(\d)\.(\d)\.(\d)\.(\d)\b/g, '$1$2$3$4$5$6');
+    cleaned = cleaned.replace(/\b(\d)\.(\d)\.(\d)\.(\d)\.(\d)\b/g, '$1$2$3$4$5');
+    cleaned = cleaned.replace(/\b(\d)\.(\d)\.(\d)\.(\d)\b/g, '$1$2$3$4');
+
+    // === PHONE NUMBER HALLUCINATION FIXES ===
+
     // Remove hallucinated +1 country codes that appear mid-sentence or incorrectly
     // Only keep +1 if it looks like an actual phone number (10 digits following)
     cleaned = cleaned.replace(/\+1\s*(?![\d\s\-\(\)]{10,})/g, '');
@@ -572,25 +590,45 @@ function cleanupTranscription(text) {
     // Remove standalone +1 at start of text (common hallucination)
     cleaned = cleaned.replace(/^\+1\s+/g, '');
 
-    // Fix common numeric hallucinations: repeated digits with dots
-    cleaned = cleaned.replace(/(\d)\.(\d)\.(\d)\.(\d)/g, '$1$2$3$4');
+    // === ADDRESS NORMALIZATION ===
 
-    // Normalize license plate patterns: space between letters and numbers
-    // e.g., "7ABC123" or "7 ABC 123" -> "7ABC123" (compact form)
-    cleaned = cleaned.replace(/([0-9])\s*([A-Z]{2,3})\s*([0-9]{3,4})/gi, '$1$2$3');
+    // Street addresses: ensure number is connected (606201 Pulaski -> 606201 Pulaski)
+    // Already handled by digit collapse above
+
+    // Common street suffixes - ensure proper spacing
+    cleaned = cleaned.replace(/(\d+)\s*(street|st|avenue|ave|road|rd|drive|dr|boulevard|blvd|highway|hwy|lane|ln|way|court|ct|circle|cir)\b/gi, '$1 $2');
+
+    // === POLICE/SCANNER TERMINOLOGY ===
+
+    // Normalize license plate patterns: "7 ABC 123" -> "7ABC123" (compact form)
+    cleaned = cleaned.replace(/\b([0-9])\s*([A-Z]{2,3})\s*([0-9]{3,4})\b/gi, '$1$2$3');
+
+    // Also handle "ABC 123" style plates
+    cleaned = cleaned.replace(/\b([A-Z]{2,3})\s+(\d{3,4})\b/g, '$1$2');
 
     // Normalize unit numbers with dashes (e.g., "5 21" -> "5-21" when context suggests)
-    cleaned = cleaned.replace(/\b(unit|adam|lincoln|david|boy|charles)\s+(\d+)\s+(\d+)\b/gi, '$1 $2-$3');
+    cleaned = cleaned.replace(/\b(unit|adam|lincoln|david|boy|charles|edward|frank|george|henry|ida|john|king|mary|nora|ocean|paul|queen|robert|sam|tom|union|victor|william)\s+(\d{1,2})\s+(\d{1,2})\b/gi, '$1 $2-$3');
 
     // Fix common 10-code transcription errors
-    cleaned = cleaned.replace(/\bten\s*(\d+)\b/gi, '10-$1');
-    cleaned = cleaned.replace(/\b10\s+(\d+)\b/g, '10-$1');
+    cleaned = cleaned.replace(/\bten\s*(\d{1,3})\b/gi, '10-$1');
+    cleaned = cleaned.replace(/\b10\s+(\d{1,3})\b/g, '10-$1');
 
     // Normalize CAD number format: YYYY-NNNNNN
     cleaned = cleaned.replace(/\bCAD\s*#?\s*(\d{4})\s*[-\s]?\s*(\d{4,8})\b/gi, 'CAD $1-$2');
 
+    // === YEAR HANDLING ===
+
+    // Fix split years: "20 24" or "20 25" -> "2024" or "2025"
+    cleaned = cleaned.replace(/\b20\s+(2[3-9])\b/g, '20$1');
+    cleaned = cleaned.replace(/\blast\s+year\b/gi, (match) => match); // preserve "last year" phrase
+
+    // === FINAL CLEANUP ===
+
     // Clean up multiple spaces
     cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
+    // Remove trailing question marks that indicate uncertainty (keep the number)
+    cleaned = cleaned.replace(/(\d)\?(\s|$)/g, '$1$2');
 
     return cleaned;
 }
@@ -673,13 +711,16 @@ function startDeepgramTranscription() {
 
             // Log for debugging
             if (data.type === 'Results') {
-                const rawTranscript = data.channel?.alternatives?.[0]?.transcript;
+                const alternative = data.channel?.alternatives?.[0];
+                const rawTranscript = alternative?.transcript;
+                const confidence = alternative?.confidence || 0;
+
                 if (rawTranscript && data.is_final) {
-                    console.log('Deepgram raw transcript:', rawTranscript);
+                    console.log('Deepgram raw transcript:', rawTranscript, 'confidence:', confidence);
                     const cleanedTranscript = cleanupTranscription(rawTranscript);
                     console.log('Deepgram cleaned transcript:', cleanedTranscript);
                     if (cleanedTranscript && !isNoiseOrSilence(cleanedTranscript)) {
-                        addTranscriptEntry(cleanedTranscript);
+                        addTranscriptEntry(cleanedTranscript, confidence);
                     }
                 }
             } else if (data.type === 'Metadata') {
@@ -811,7 +852,7 @@ function clearPlaceholder() {
     if (placeholder) placeholder.remove();
 }
 
-function addTranscriptEntry(text) {
+function addTranscriptEntry(text, confidence = null) {
     const container = document.getElementById('transcript-container');
     clearPlaceholder();
 
@@ -828,8 +869,23 @@ function addTranscriptEntry(text) {
         playAlertSound();
     }
 
+    // Mark low-confidence transcriptions (below 80%) for visual warning
+    const isLowConfidence = confidence !== null && confidence < 0.80;
+    if (isLowConfidence) {
+        entry.classList.add('low-confidence');
+    }
+
+    // Build confidence display
+    let confidenceHtml = '';
+    if (confidence !== null) {
+        const confPercent = Math.round(confidence * 100);
+        const confClass = confidence >= 0.90 ? 'conf-high' : (confidence >= 0.80 ? 'conf-medium' : 'conf-low');
+        confidenceHtml = `<span class="transcript-confidence ${confClass}" title="Transcription confidence">${confPercent}%</span>`;
+    }
+
     entry.innerHTML = `
         <span class="transcript-time">[${time}]</span>
+        ${confidenceHtml}
         <span class="transcript-text">${highlighted}</span>
     `;
 

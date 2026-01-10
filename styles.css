@@ -179,6 +179,42 @@ main {
     border-radius: 3px;
 }
 
+/* Low Confidence Warning */
+.transcript-entry.low-confidence {
+    background: rgba(255, 193, 7, 0.15);
+    border-left: 3px solid #ffc107;
+    padding-left: 12px;
+}
+
+.transcript-entry.low-confidence .transcript-text {
+    font-style: italic;
+}
+
+/* Confidence Score Display */
+.transcript-confidence {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 8px;
+    font-family: monospace;
+}
+
+.transcript-confidence.conf-high {
+    background: rgba(76, 175, 80, 0.3);
+    color: #81c784;
+}
+
+.transcript-confidence.conf-medium {
+    background: rgba(255, 193, 7, 0.3);
+    color: #ffd54f;
+}
+
+.transcript-confidence.conf-low {
+    background: rgba(244, 67, 54, 0.3);
+    color: #e57373;
+}
+
 .status {
     display: flex;
     align-items: center;
