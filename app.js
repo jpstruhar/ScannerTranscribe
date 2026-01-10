@@ -1,7 +1,9 @@
 /**
  * Baltimore Scanner - Live Police & Fire Radio
  * Broadcastify Feed ID: 40593
- * With Tab Audio Capture and Whisper AI Transcription
+ * With Tab Audio Capture and Dual Transcription Engines:
+ * - Whisper AI (Free, Local)
+ * - Deepgram (Accurate, API Key)
  */
 
 import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
@@ -16,20 +18,31 @@ let analyser = null;
 let isCapturing = false;
 let animationId = null;
 
-// Whisper transcription state
-let transcriber = null;
-let isModelLoaded = false;
+// Transcription engine state
+let currentEngine = 'whisper';
 let isTranscribing = false;
+
+// Whisper state
+let transcriber = null;
+let isWhisperLoaded = false;
+let whisperMediaRecorder = null;
 let audioChunks = [];
-let mediaRecorder = null;
 let transcriptionInterval = null;
 
+// Deepgram state
+let deepgramSocket = null;
+let deepgramApiKey = '';
+let deepgramMediaRecorder = null;
+
 // Settings
-const CHUNK_DURATION = 10000; // 10 seconds per chunk for better context
+const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeAudioCapture();
-    initializeTranscription();
+    initializeEngineSelector();
+    initializeWhisper();
+    initializeDeepgram();
+    initializeTranscriptionControls();
 });
 
 // ============ Audio Capture ============
@@ -46,7 +59,6 @@ async function startAudioCapture() {
     const captureBtn = document.getElementById('capture-audio');
     const stopBtn = document.getElementById('stop-audio');
     const statusElement = document.getElementById('status');
-    const startTranscriptionBtn = document.getElementById('start-transcription');
 
     try {
         mediaStream = await navigator.mediaDevices.getDisplayMedia({
@@ -67,19 +79,18 @@ async function startAudioCapture() {
         // Stop video track
         mediaStream.getVideoTracks().forEach(track => track.stop());
 
-        // Set up audio context for visualization only (no playback - listen from original tab)
+        // Set up audio context for visualization only
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         const source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
 
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
 
-        // Only connect to analyser for visualization - NO playback to avoid echo
-        // User should listen to audio from the original Broadcastify tab
+        // Only connect to analyser for visualization - NO playback
         source.connect(analyser);
 
         // Set up MediaRecorder for transcription
-        setupMediaRecorder(audioTracks);
+        setupMediaRecorders(audioTracks);
 
         isCapturing = true;
 
@@ -87,16 +98,14 @@ async function startAudioCapture() {
         stopBtn.disabled = false;
         updateStatus(statusElement, true, 'Capturing Audio');
 
-        // Enable transcription button if model is loaded
-        if (isModelLoaded) {
-            startTranscriptionBtn.disabled = false;
-        }
+        // Enable transcription button based on engine readiness
+        updateTranscriptionButtonState();
 
         visualize();
 
         audioTracks[0].addEventListener('ended', stopAudioCapture);
 
-        updateTranscriptStatusText('Audio captured. Start transcription when ready.');
+        updateTranscriptStatus('Audio captured. Start transcription when ready.');
 
     } catch (error) {
         console.error('Error capturing audio:', error);
@@ -110,19 +119,26 @@ async function startAudioCapture() {
     }
 }
 
-function setupMediaRecorder(audioTracks) {
+function setupMediaRecorders(audioTracks) {
     const stream = new MediaStream(audioTracks);
 
-    // Try to use a supported format
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
 
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
-
-    mediaRecorder.ondataavailable = (event) => {
+    // Whisper MediaRecorder (chunk-based)
+    whisperMediaRecorder = new MediaRecorder(stream, { mimeType });
+    whisperMediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
             audioChunks.push(event.data);
+        }
+    };
+
+    // Deepgram MediaRecorder (streaming)
+    deepgramMediaRecorder = new MediaRecorder(stream, { mimeType });
+    deepgramMediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+            deepgramSocket.send(event.data);
         }
     };
 }
@@ -159,13 +175,14 @@ function stopAudioCapture() {
 
     isCapturing = false;
     analyser = null;
-    mediaRecorder = null;
+    whisperMediaRecorder = null;
+    deepgramMediaRecorder = null;
 
     captureBtn.disabled = false;
     stopBtn.disabled = true;
     startTranscriptionBtn.disabled = true;
     updateStatus(statusElement, false, 'Ready');
-    updateTranscriptStatusText('Capture audio first');
+    updateTranscriptStatus('Capture audio first');
 }
 
 function visualize() {
@@ -212,36 +229,67 @@ function updateStatus(statusElement, isLive, text) {
     if (statusText && text) statusText.textContent = text;
 }
 
+// ============ Engine Selector ============
+
+function initializeEngineSelector() {
+    const engineRadios = document.querySelectorAll('input[name="engine"]');
+    const whisperConfig = document.getElementById('whisper-config');
+    const deepgramConfig = document.getElementById('deepgram-config');
+
+    engineRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            currentEngine = e.target.value;
+
+            // Show/hide config sections
+            whisperConfig.style.display = currentEngine === 'whisper' ? 'block' : 'none';
+            deepgramConfig.style.display = currentEngine === 'deepgram' ? 'block' : 'none';
+
+            // Stop transcription if running
+            if (isTranscribing) {
+                stopTranscription();
+            }
+
+            // Update button state
+            updateTranscriptionButtonState();
+        });
+    });
+}
+
+function updateTranscriptionButtonState() {
+    const startBtn = document.getElementById('start-transcription');
+
+    if (!isCapturing) {
+        startBtn.disabled = true;
+        return;
+    }
+
+    if (currentEngine === 'whisper') {
+        startBtn.disabled = !isWhisperLoaded;
+    } else if (currentEngine === 'deepgram') {
+        startBtn.disabled = !deepgramApiKey;
+    }
+}
+
 // ============ Whisper Transcription ============
 
-function initializeTranscription() {
-    const loadModelBtn = document.getElementById('load-model');
-    const startBtn = document.getElementById('start-transcription');
-    const stopBtn = document.getElementById('stop-transcription');
-    const clearBtn = document.getElementById('clear-transcript');
-
-    loadModelBtn.addEventListener('click', loadWhisperModel);
-    startBtn.addEventListener('click', startTranscription);
-    stopBtn.addEventListener('click', stopTranscription);
-    clearBtn.addEventListener('click', clearTranscript);
+function initializeWhisper() {
+    const loadBtn = document.getElementById('load-whisper');
+    loadBtn.addEventListener('click', loadWhisperModel);
 }
 
 async function loadWhisperModel() {
-    const modelStatus = document.getElementById('model-status');
-    const modelStatusText = modelStatus.querySelector('.model-status-text');
-    const loadModelBtn = document.getElementById('load-model');
-    const progressBar = document.getElementById('progress-bar');
-    const progressFill = document.getElementById('progress-fill');
-    const startTranscriptionBtn = document.getElementById('start-transcription');
+    const statusElement = document.getElementById('whisper-status');
+    const statusText = statusElement.querySelector('.status-text');
+    const loadBtn = document.getElementById('load-whisper');
+    const progressBar = document.getElementById('whisper-progress');
+    const progressFill = document.getElementById('whisper-progress-fill');
 
     try {
-        loadModelBtn.disabled = true;
-        loadModelBtn.textContent = 'Loading...';
-        modelStatus.classList.add('loading');
-        modelStatusText.textContent = 'Whisper AI: Loading model (~150MB)...';
+        loadBtn.disabled = true;
+        loadBtn.textContent = 'Loading...';
+        statusText.textContent = 'Whisper: Loading model (~150MB)...';
         progressBar.style.display = 'block';
 
-        // Load Whisper base model (better accuracy for radio audio)
         transcriber = await pipeline(
             'automatic-speech-recognition',
             'Xenova/whisper-base.en',
@@ -250,7 +298,7 @@ async function loadWhisperModel() {
                     if (progress.status === 'downloading' || progress.status === 'progress') {
                         const percent = progress.progress || 0;
                         progressFill.style.width = `${percent}%`;
-                        modelStatusText.textContent = `Whisper AI: Downloading ${Math.round(percent)}%`;
+                        statusText.textContent = `Whisper: Downloading ${Math.round(percent)}%`;
                     } else if (progress.status === 'ready') {
                         progressFill.style.width = '100%';
                     }
@@ -258,92 +306,58 @@ async function loadWhisperModel() {
             }
         );
 
-        isModelLoaded = true;
-        modelStatus.classList.remove('loading');
-        modelStatus.classList.add('loaded');
-        modelStatusText.textContent = 'Whisper AI: Ready';
-        loadModelBtn.style.display = 'none';
+        isWhisperLoaded = true;
+        statusElement.classList.add('loaded');
+        statusText.textContent = 'Whisper: Ready';
+        loadBtn.style.display = 'none';
         progressBar.style.display = 'none';
 
-        // Enable transcription if audio is being captured
-        if (isCapturing) {
-            startTranscriptionBtn.disabled = false;
-        }
-
-        updateTranscriptStatusText('Model loaded. Start transcription when ready.');
+        updateTranscriptionButtonState();
+        updateTranscriptStatus('Whisper loaded. Start transcription when ready.');
 
     } catch (error) {
         console.error('Error loading Whisper model:', error);
-        modelStatus.classList.remove('loading');
-        modelStatusText.textContent = 'Whisper AI: Failed to load';
-        loadModelBtn.disabled = false;
-        loadModelBtn.textContent = 'Retry';
+        statusText.textContent = 'Whisper: Failed to load';
+        loadBtn.disabled = false;
+        loadBtn.textContent = 'Retry';
         progressBar.style.display = 'none';
         alert(`Failed to load Whisper model: ${error.message}`);
     }
 }
 
-async function startTranscription() {
-    if (!isModelLoaded || !isCapturing || !mediaRecorder) {
-        alert('Please load the model and capture audio first.');
-        return;
-    }
+async function startWhisperTranscription() {
+    if (!whisperMediaRecorder) return;
 
-    const startBtn = document.getElementById('start-transcription');
-    const stopBtn = document.getElementById('stop-transcription');
-    const transcriptStatus = document.getElementById('transcript-status');
-
-    isTranscribing = true;
     audioChunks = [];
+    whisperMediaRecorder.start();
 
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    transcriptStatus.classList.add('listening');
-    updateTranscriptStatusText('Transcribing...');
-    clearPlaceholder();
-
-    // Start recording
-    mediaRecorder.start();
-
-    // Process audio every CHUNK_DURATION
     transcriptionInterval = setInterval(async () => {
         if (!isTranscribing) return;
 
-        // Stop and restart to get chunks
-        mediaRecorder.stop();
-
-        // Wait for data
+        whisperMediaRecorder.stop();
         await new Promise(resolve => setTimeout(resolve, 100));
 
         if (audioChunks.length > 0) {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             audioChunks = [];
-
-            // Process the audio
-            await transcribeAudio(audioBlob);
+            await transcribeWithWhisper(audioBlob);
         }
 
-        // Restart recording if still transcribing
-        if (isTranscribing && mediaRecorder.state === 'inactive') {
-            mediaRecorder.start();
+        if (isTranscribing && whisperMediaRecorder.state === 'inactive') {
+            whisperMediaRecorder.start();
         }
-    }, CHUNK_DURATION);
+    }, WHISPER_CHUNK_DURATION);
 }
 
-async function transcribeAudio(audioBlob) {
+async function transcribeWithWhisper(audioBlob) {
     try {
-        // Convert blob to array buffer
         const arrayBuffer = await audioBlob.arrayBuffer();
-
-        // Decode audio
         const tempContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         const audioBuffer = await tempContext.decodeAudioData(arrayBuffer);
         tempContext.close();
 
-        // Get audio data as Float32Array
         const audioData = audioBuffer.getChannelData(0);
 
-        // Run transcription with optimized settings for radio audio
         const result = await transcriber(audioData, {
             chunk_length_s: 30,
             stride_length_s: 5,
@@ -352,28 +366,36 @@ async function transcribeAudio(audioBlob) {
             task: 'transcribe'
         });
 
-        // Add result to transcript
         if (result && result.text && result.text.trim()) {
             const text = result.text.trim();
-            // Filter out common noise/silence transcriptions
             if (!isNoiseOrSilence(text)) {
                 addTranscriptEntry(text);
             }
         }
 
     } catch (error) {
-        console.error('Transcription error:', error);
-        // Don't show error for every chunk, just log it
+        console.error('Whisper transcription error:', error);
     }
+}
+
+function stopWhisperTranscription() {
+    if (transcriptionInterval) {
+        clearInterval(transcriptionInterval);
+        transcriptionInterval = null;
+    }
+
+    if (whisperMediaRecorder && whisperMediaRecorder.state !== 'inactive') {
+        whisperMediaRecorder.stop();
+    }
+
+    audioChunks = [];
 }
 
 function isNoiseOrSilence(text) {
     const trimmed = text.trim();
 
-    // Empty or very short
     if (trimmed.length < 3) return true;
 
-    // Common noise patterns
     const noisePatterns = [
         /^\s*$/,
         /^\.+$/,
@@ -400,25 +422,172 @@ function isNoiseOrSilence(text) {
         return true;
     }
 
-    // Detect repetitive patterns like "703.5.5.5.5..." or "1.1.1.1..."
-    // This happens when Whisper hallucinates on radio tones/static
+    // Detect hallucination patterns
     if (/(\d+\.){4,}/.test(trimmed)) return true;
-    if (/(.)\1{5,}/.test(trimmed)) return true; // Same character repeated 6+ times
+    if (/(.)\1{5,}/.test(trimmed)) return true;
 
-    // Detect repeating word patterns like "the the the" or "5 5 5 5"
     const words = trimmed.toLowerCase().split(/\s+/);
     if (words.length >= 3) {
         const uniqueWords = new Set(words);
-        // If more than 70% of words are the same, it's probably noise
         if (uniqueWords.size === 1 || (words.length / uniqueWords.size) > 3) {
             return true;
         }
     }
 
-    // Detect numeric spam like "5.5" repeated
     if (/^[\d\.\s]+$/.test(trimmed) && trimmed.length > 10) return true;
 
     return false;
+}
+
+// ============ Deepgram Transcription ============
+
+function initializeDeepgram() {
+    const apiKeyInput = document.getElementById('deepgram-key');
+    const statusElement = document.getElementById('deepgram-status');
+    const statusText = statusElement.querySelector('.status-text');
+
+    // Load saved API key
+    const savedKey = localStorage.getItem('deepgram-api-key');
+    if (savedKey) {
+        apiKeyInput.value = savedKey;
+        deepgramApiKey = savedKey;
+        statusText.textContent = 'Deepgram: API key saved';
+        statusElement.classList.add('loaded');
+        updateTranscriptionButtonState();
+    }
+
+    apiKeyInput.addEventListener('input', (e) => {
+        deepgramApiKey = e.target.value.trim();
+
+        if (deepgramApiKey) {
+            localStorage.setItem('deepgram-api-key', deepgramApiKey);
+            statusText.textContent = 'Deepgram: Ready';
+            statusElement.classList.add('loaded');
+        } else {
+            localStorage.removeItem('deepgram-api-key');
+            statusText.textContent = 'Enter API key to enable';
+            statusElement.classList.remove('loaded');
+        }
+
+        updateTranscriptionButtonState();
+    });
+}
+
+function startDeepgramTranscription() {
+    if (!deepgramApiKey || !deepgramMediaRecorder) return;
+
+    const statusElement = document.getElementById('deepgram-status');
+    const statusText = statusElement.querySelector('.status-text');
+
+    try {
+        // Connect to Deepgram WebSocket
+        deepgramSocket = new WebSocket(
+            `wss://api.deepgram.com/v1/listen?model=nova-2&language=en-US&smart_format=true&encoding=opus&sample_rate=16000`,
+            ['token', deepgramApiKey]
+        );
+
+        deepgramSocket.onopen = () => {
+            console.log('Deepgram connected');
+            statusText.textContent = 'Deepgram: Connected';
+
+            // Start streaming audio
+            deepgramMediaRecorder.start(250); // Send data every 250ms
+        };
+
+        deepgramSocket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.channel && data.channel.alternatives && data.channel.alternatives[0]) {
+                const transcript = data.channel.alternatives[0].transcript;
+
+                if (transcript && data.is_final) {
+                    addTranscriptEntry(transcript);
+                }
+            }
+        };
+
+        deepgramSocket.onerror = (error) => {
+            console.error('Deepgram error:', error);
+            statusText.textContent = 'Deepgram: Connection error';
+            stopTranscription();
+        };
+
+        deepgramSocket.onclose = () => {
+            console.log('Deepgram disconnected');
+            if (isTranscribing && currentEngine === 'deepgram') {
+                statusText.textContent = 'Deepgram: Disconnected';
+            }
+        };
+
+    } catch (error) {
+        console.error('Failed to start Deepgram:', error);
+        statusText.textContent = 'Deepgram: Failed to connect';
+        alert(`Deepgram error: ${error.message}`);
+    }
+}
+
+function stopDeepgramTranscription() {
+    if (deepgramMediaRecorder && deepgramMediaRecorder.state !== 'inactive') {
+        deepgramMediaRecorder.stop();
+    }
+
+    if (deepgramSocket) {
+        deepgramSocket.close();
+        deepgramSocket = null;
+    }
+
+    const statusElement = document.getElementById('deepgram-status');
+    const statusText = statusElement.querySelector('.status-text');
+    if (deepgramApiKey) {
+        statusText.textContent = 'Deepgram: Ready';
+    }
+}
+
+// ============ Transcription Controls ============
+
+function initializeTranscriptionControls() {
+    const startBtn = document.getElementById('start-transcription');
+    const stopBtn = document.getElementById('stop-transcription');
+    const clearBtn = document.getElementById('clear-transcript');
+
+    startBtn.addEventListener('click', startTranscription);
+    stopBtn.addEventListener('click', stopTranscription);
+    clearBtn.addEventListener('click', clearTranscript);
+}
+
+function startTranscription() {
+    const startBtn = document.getElementById('start-transcription');
+    const stopBtn = document.getElementById('stop-transcription');
+    const transcriptStatus = document.getElementById('transcript-status');
+
+    if (currentEngine === 'whisper' && !isWhisperLoaded) {
+        alert('Please load the Whisper model first.');
+        return;
+    }
+
+    if (currentEngine === 'deepgram' && !deepgramApiKey) {
+        alert('Please enter your Deepgram API key first.');
+        return;
+    }
+
+    if (!isCapturing) {
+        alert('Please capture tab audio first.');
+        return;
+    }
+
+    isTranscribing = true;
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    transcriptStatus.classList.add('listening');
+    updateTranscriptStatus('Transcribing...');
+    clearPlaceholder();
+
+    if (currentEngine === 'whisper') {
+        startWhisperTranscription();
+    } else if (currentEngine === 'deepgram') {
+        startDeepgramTranscription();
+    }
 }
 
 function stopTranscription() {
@@ -428,25 +597,21 @@ function stopTranscription() {
 
     isTranscribing = false;
 
-    if (transcriptionInterval) {
-        clearInterval(transcriptionInterval);
-        transcriptionInterval = null;
+    if (currentEngine === 'whisper') {
+        stopWhisperTranscription();
+    } else if (currentEngine === 'deepgram') {
+        stopDeepgramTranscription();
     }
 
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-    }
-
-    audioChunks = [];
-
-    startBtn.disabled = !isCapturing || !isModelLoaded;
+    startBtn.disabled = !isCapturing || (currentEngine === 'whisper' && !isWhisperLoaded) || (currentEngine === 'deepgram' && !deepgramApiKey);
     stopBtn.disabled = true;
     transcriptStatus.classList.remove('listening');
-    updateTranscriptStatusText(isCapturing ? 'Paused' : 'Capture audio first');
+    updateTranscriptStatus(isCapturing ? 'Paused' : 'Capture audio first');
 }
 
-function updateTranscriptStatusText(text) {
-    const statusText = document.querySelector('.mic-status-text');
+function updateTranscriptStatus(text) {
+    const statusElement = document.getElementById('transcript-status');
+    const statusText = statusElement.querySelector('.status-text');
     if (statusText) statusText.textContent = text;
 }
 
@@ -477,7 +642,7 @@ function clearTranscript() {
     const container = document.getElementById('transcript-container');
     container.innerHTML = `
         <p class="transcript-placeholder">
-            Load the Whisper AI model, capture tab audio, then start transcription.
+            Select an engine, capture tab audio, then start transcription.
         </p>
     `;
 }
@@ -491,4 +656,4 @@ function escapeHtml(text) {
 // Log info
 console.log(`Baltimore Scanner - Feed ID: ${FEED_ID}`);
 console.log(`Open Broadcastify: ${BROADCASTIFY_WEB_PLAYER}`);
-console.log('Whisper AI transcription enabled');
+console.log('Transcription engines: Whisper AI (local) & Deepgram (API)');

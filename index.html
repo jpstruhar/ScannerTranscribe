@@ -41,11 +41,10 @@
                 <div class="player-instructions">
                     <p><strong>How to use:</strong></p>
                     <ol>
-                        <li>Open the <a href="https://www.broadcastify.com/webPlayer/40593" target="_blank" id="broadcastify-link">Broadcastify player</a> in a new tab and start playing</li>
+                        <li>Open the <a href="https://www.broadcastify.com/webPlayer/40593" target="_blank">Broadcastify player</a> in a new tab and start playing</li>
                         <li>Click "Capture Tab Audio" and select the Broadcastify tab (check "Share tab audio")</li>
-                        <li>Keep listening from the Broadcastify tab - transcription appears here</li>
+                        <li>Choose transcription engine and start transcription</li>
                     </ol>
-                    <p class="note"><strong>Note:</strong> Listen to audio from the Broadcastify tab. This page only shows the transcription.</p>
                 </div>
             </section>
 
@@ -54,7 +53,7 @@
                     <h3>Live Transcript</h3>
                     <div class="transcript-controls">
                         <button id="start-transcription" class="btn btn-primary" disabled>
-                            Start Transcription
+                            Start
                         </button>
                         <button id="stop-transcription" class="btn btn-secondary" disabled>
                             Stop
@@ -64,22 +63,50 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="engine-selector">
+                    <label><strong>Transcription Engine:</strong></label>
+                    <div class="engine-options">
+                        <label class="radio-label">
+                            <input type="radio" name="engine" value="whisper" checked>
+                            <span>Whisper AI (Free, Local)</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="engine" value="deepgram">
+                            <span>Deepgram (Accurate, API Key)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="engine-config" id="whisper-config">
+                    <div class="config-status" id="whisper-status">
+                        <span class="status-text">Whisper: Not loaded</span>
+                        <button id="load-whisper" class="btn btn-small">Load Model (~150MB)</button>
+                    </div>
+                    <div class="progress-bar" id="whisper-progress" style="display: none;">
+                        <div class="progress-fill" id="whisper-progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="engine-config" id="deepgram-config" style="display: none;">
+                    <div class="config-input">
+                        <label for="deepgram-key">Deepgram API Key:</label>
+                        <input type="password" id="deepgram-key" placeholder="Enter your API key">
+                        <a href="https://console.deepgram.com/signup" target="_blank" class="help-link">Get free $200 credit</a>
+                    </div>
+                    <div class="config-status" id="deepgram-status">
+                        <span class="status-text">Enter API key to enable</span>
+                    </div>
+                </div>
+
                 <div class="transcript-status" id="transcript-status">
-                    <span class="mic-indicator"></span>
-                    <span class="mic-status-text">Capture audio first</span>
+                    <span class="status-indicator"></span>
+                    <span class="status-text">Capture audio first</span>
                 </div>
-                <div class="model-status" id="model-status">
-                    <div class="model-loading">
-                        <span class="model-status-text">Whisper AI: Not loaded</span>
-                        <button id="load-model" class="btn btn-small">Load Model</button>
-                    </div>
-                    <div class="progress-bar" id="progress-bar" style="display: none;">
-                        <div class="progress-fill" id="progress-fill"></div>
-                    </div>
-                </div>
+
                 <div class="transcript-container" id="transcript-container">
                     <p class="transcript-placeholder">
-                        Load the Whisper AI model, capture tab audio, then start transcription.
+                        Select an engine, capture tab audio, then start transcription.
                     </p>
                 </div>
             </section>
@@ -87,25 +114,20 @@
             <section class="info-section">
                 <h3>About This Feed</h3>
                 <p>
-                    This feed provides live audio from Baltimore City emergency services
-                    including police dispatch, fire department, and emergency medical services.
+                    Live audio from Baltimore City emergency services including police dispatch,
+                    fire department, and emergency medical services.
                 </p>
                 <ul class="feed-details">
                     <li><strong>Location:</strong> Baltimore, Maryland</li>
                     <li><strong>Coverage:</strong> Police, Fire, EMS</li>
                     <li><strong>Source:</strong> Broadcastify</li>
-                    <li><strong>Transcription:</strong> Whisper AI (runs locally in browser)</li>
                 </ul>
             </section>
         </main>
 
         <footer>
-            <p>
-                Audio provided by <a href="https://www.broadcastify.com" target="_blank" rel="noopener noreferrer">Broadcastify</a>
-            </p>
-            <p class="disclaimer">
-                For informational purposes only. Not for emergency use.
-            </p>
+            <p>Audio provided by <a href="https://www.broadcastify.com" target="_blank">Broadcastify</a></p>
+            <p class="disclaimer">For informational purposes only. Not for emergency use.</p>
         </footer>
     </div>
 

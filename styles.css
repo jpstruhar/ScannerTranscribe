@@ -347,6 +347,115 @@ main {
     color: var(--accent-color);
 }
 
+/* Engine Selector */
+.engine-selector {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--border-radius);
+}
+
+.engine-selector > label {
+    display: block;
+    margin-bottom: 10px;
+    color: var(--text-color);
+}
+
+.engine-options {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--border-radius);
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.radio-label:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.radio-label input[type="radio"] {
+    accent-color: var(--accent-color);
+    width: 16px;
+    height: 16px;
+}
+
+.radio-label input[type="radio"]:checked + span {
+    color: var(--text-color);
+}
+
+/* Engine Config */
+.engine-config {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--border-radius);
+}
+
+.config-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.config-status .status-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.engine-config.loaded .status-text,
+.config-status.loaded .status-text {
+    color: var(--success-color);
+}
+
+.config-input {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.config-input label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.config-input input[type="password"],
+.config-input input[type="text"] {
+    padding: 10px 12px;
+    border-radius: var(--border-radius);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-color);
+    font-size: 0.9rem;
+}
+
+.config-input input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.help-link {
+    color: var(--accent-color);
+    font-size: 0.8rem;
+    text-decoration: none;
+}
+
+.help-link:hover {
+    text-decoration: underline;
+}
+
 .btn-small {
     padding: 6px 12px;
     font-size: 0.8rem;
