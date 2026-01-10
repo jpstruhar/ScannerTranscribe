@@ -37,6 +37,10 @@ let usageInterval = null;
 // Keyword alerts
 let alertKeywords = [];
 
+// Privacy settings
+let redactionEnabled = false;
+let phoneticNormalizationEnabled = true;
+
 // Settings
 const WHISPER_CHUNK_DURATION = 10000; // 10 seconds per chunk
 
@@ -51,6 +55,7 @@ const SCANNER_VOCABULARY_PROMPT = `Police radio transcript. Unit numbers: Adam-1
 document.addEventListener('DOMContentLoaded', () => {
     initializeFeedInput();
     initializeKeywords();
+    initializePrivacySettings();
     initializeAudioCapture();
     initializeEngineSelector();
     initializeWhisper();
@@ -135,6 +140,142 @@ function checkForKeywords(text) {
 
 function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ============ Privacy Settings ============
+
+function initializePrivacySettings() {
+    const redactionCheckbox = document.getElementById('redaction-mode');
+    const phoneticCheckbox = document.getElementById('phonetic-mode');
+
+    // Load saved settings
+    const savedRedaction = localStorage.getItem('redaction-enabled');
+    const savedPhonetic = localStorage.getItem('phonetic-enabled');
+
+    if (savedRedaction === 'true') {
+        redactionEnabled = true;
+        redactionCheckbox.checked = true;
+    }
+
+    if (savedPhonetic !== 'false') {
+        phoneticNormalizationEnabled = true;
+        phoneticCheckbox.checked = true;
+    } else {
+        phoneticNormalizationEnabled = false;
+        phoneticCheckbox.checked = false;
+    }
+
+    redactionCheckbox.addEventListener('change', (e) => {
+        redactionEnabled = e.target.checked;
+        localStorage.setItem('redaction-enabled', redactionEnabled);
+    });
+
+    phoneticCheckbox.addEventListener('change', (e) => {
+        phoneticNormalizationEnabled = e.target.checked;
+        localStorage.setItem('phonetic-enabled', phoneticNormalizationEnabled);
+    });
+}
+
+// Phonetic alphabet mapping
+const PHONETIC_MAP = {
+    'adam': 'A', 'alfa': 'A', 'alpha': 'A',
+    'boy': 'B', 'bravo': 'B', 'baker': 'B',
+    'charles': 'C', 'charlie': 'C',
+    'david': 'D', 'delta': 'D', 'dog': 'D',
+    'edward': 'E', 'echo': 'E', 'easy': 'E',
+    'frank': 'F', 'foxtrot': 'F', 'fox': 'F',
+    'george': 'G', 'golf': 'G',
+    'henry': 'H', 'hotel': 'H', 'how': 'H',
+    'ida': 'I', 'india': 'I', 'item': 'I',
+    'john': 'J', 'juliet': 'J', 'jig': 'J',
+    'king': 'K', 'kilo': 'K',
+    'lincoln': 'L', 'lima': 'L', 'love': 'L',
+    'mary': 'M', 'mike': 'M',
+    'nora': 'N', 'november': 'N', 'nan': 'N',
+    'ocean': 'O', 'oscar': 'O', 'oboe': 'O',
+    'paul': 'P', 'papa': 'P', 'peter': 'P',
+    'queen': 'Q', 'quebec': 'Q',
+    'robert': 'R', 'romeo': 'R', 'roger': 'R',
+    'sam': 'S', 'sierra': 'S', 'sugar': 'S',
+    'tom': 'T', 'tango': 'T', 'tare': 'T',
+    'union': 'U', 'uniform': 'U', 'uncle': 'U',
+    'victor': 'V', 'victoria': 'V',
+    'william': 'W', 'whiskey': 'W',
+    'x-ray': 'X', 'xray': 'X',
+    'yellow': 'Y', 'yankee': 'Y', 'yoke': 'Y',
+    'zebra': 'Z', 'zulu': 'Z'
+};
+
+/**
+ * Normalize phonetic alphabet sequences to letters
+ * "Adam Boy Charles 123" -> "ABC123"
+ */
+function normalizePhonetics(text) {
+    if (!phoneticNormalizationEnabled) return text;
+
+    let result = text;
+
+    // Match sequences of 2+ phonetic words (case insensitive)
+    const phoneticWords = Object.keys(PHONETIC_MAP).join('|');
+    const sequencePattern = new RegExp(`\\b((?:(?:${phoneticWords})\\s*){2,})\\b`, 'gi');
+
+    result = result.replace(sequencePattern, (match) => {
+        const words = match.trim().split(/\s+/);
+        let letters = '';
+        for (const word of words) {
+            const lower = word.toLowerCase();
+            if (PHONETIC_MAP[lower]) {
+                letters += PHONETIC_MAP[lower];
+            }
+        }
+        return letters || match;
+    });
+
+    return result;
+}
+
+/**
+ * Redact personally identifiable information
+ * Replaces sensitive data with [REDACTED] markers
+ */
+function redactPII(text) {
+    if (!redactionEnabled) return text;
+
+    let redacted = text;
+
+    // SSN patterns: XXX-XX-XXXX
+    redacted = redacted.replace(/\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g, '<span class="redacted">[SSN]</span>');
+
+    // Phone numbers: various formats
+    redacted = redacted.replace(/\b(?:\+?1[-\s]?)?\(?\d{3}\)?[-\s]?\d{3}[-\s]?\d{4}\b/g, '<span class="redacted">[PHONE]</span>');
+
+    // DOB patterns: "date of birth", "DOB", "D.O.B." followed by date-like patterns
+    redacted = redacted.replace(/\b(?:date\s+of\s+birth|DOB|D\.O\.B\.?)\s*[:\s]?\s*\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/gi, '<span class="redacted">[DOB]</span>');
+    redacted = redacted.replace(/\b(?:date\s+of\s+birth|DOB|D\.O\.B\.?)\s*[:\s]?\s*(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}/gi, '<span class="redacted">[DOB]</span>');
+    redacted = redacted.replace(/\b(?:born\s+(?:on\s+)?)\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/gi, '<span class="redacted">[DOB]</span>');
+
+    // License plates (after phonetic normalization, these are compact like 7ABC123)
+    redacted = redacted.replace(/\b\d[A-Z]{2,3}\d{3,4}\b/g, '<span class="redacted">[PLATE]</span>');
+    redacted = redacted.replace(/\b[A-Z]{2,3}\d{3,4}\b/g, '<span class="redacted">[PLATE]</span>');
+
+    // Street addresses: number + street name + suffix
+    redacted = redacted.replace(/\b\d{1,6}\s+(?:[NSEW]\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Highway|Hwy|Lane|Ln|Way|Court|Ct|Circle|Cir|Place|Pl)\b/gi, '<span class="redacted">[ADDRESS]</span>');
+
+    // Names after common prefixes (basic heuristic)
+    redacted = redacted.replace(/\b(?:named?|name\s+is|subject|suspect|victim|driver|registered\s+to|owner)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/gi, (match, name) => {
+        return match.replace(name, '<span class="redacted">[NAME]</span>');
+    });
+
+    // Full names pattern: First Last or First Middle Last (after "is", "named", etc.)
+    redacted = redacted.replace(/\b(?:is|was)\s+([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/g, (match, name) => {
+        // Only redact if it looks like a name (not common words)
+        const commonWords = ['the', 'and', 'for', 'that', 'this', 'with'];
+        const words = name.toLowerCase().split(/\s+/);
+        if (words.some(w => commonWords.includes(w))) return match;
+        return match.replace(name, '<span class="redacted">[NAME]</span>');
+    });
+
+    return redacted;
 }
 
 // ============ Audio Capture ============
@@ -860,8 +1001,18 @@ function addTranscriptEntry(text, confidence = null) {
     entry.className = 'transcript-entry';
     const time = new Date().toLocaleTimeString();
 
-    // Check for keyword alerts
-    const { hasKeyword, highlighted } = checkForKeywords(escapeHtml(text));
+    // Apply phonetic normalization first (before HTML escaping)
+    let processedText = normalizePhonetics(text);
+
+    // Escape HTML for security
+    let displayText = escapeHtml(processedText);
+
+    // Check for keyword alerts (on plain text)
+    const { hasKeyword, highlighted } = checkForKeywords(displayText);
+    displayText = highlighted;
+
+    // Apply PII redaction (adds HTML spans, so must be after escapeHtml)
+    displayText = redactPII(displayText);
 
     if (hasKeyword) {
         entry.classList.add('alert');
@@ -886,7 +1037,7 @@ function addTranscriptEntry(text, confidence = null) {
     entry.innerHTML = `
         <span class="transcript-time">[${time}]</span>
         ${confidenceHtml}
-        <span class="transcript-text">${highlighted}</span>
+        <span class="transcript-text">${displayText}</span>
     `;
 
     container.appendChild(entry);
