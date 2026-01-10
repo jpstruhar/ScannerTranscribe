@@ -1122,9 +1122,9 @@ function startDeepgramTranscription() {
 
     try {
         // Connect to Deepgram WebSocket
-        // Using nova-3 for best accuracy with complex acoustics (54% lower WER than Nova-2)
+        // Using nova-2-phonecall for optimized radio/phone audio handling
         // numerals=true outputs numbers as digits (123 not "one two three")
-        // Expanded keywords (up to 100 terms) boost recognition of police/scanner terminology
+        // Expanded keywords boost recognition of police/scanner terminology
         const deepgramKeywords = [
             // 10-codes (high priority)
             '10-4:2', '10-97:2', '10-8:2', '10-7:2', '10-20:2', '10-23:2', '10-22:2',
@@ -1155,7 +1155,7 @@ function startDeepgramTranscription() {
         ].map(k => `keywords=${encodeURIComponent(k)}`).join('&');
 
         deepgramSocket = new WebSocket(
-            `wss://api.deepgram.com/v1/listen?model=nova-3&language=en-US&smart_format=true&punctuate=true&utterances=true&utt_split=1.0&numerals=true&${deepgramKeywords}`,
+            `wss://api.deepgram.com/v1/listen?model=nova-2-phonecall&language=en-US&smart_format=true&punctuate=true&utterances=true&utt_split=1.0&numerals=true&${deepgramKeywords}`,
             ['token', deepgramApiKey]
         );
 

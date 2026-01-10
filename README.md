@@ -64,7 +64,7 @@ Enter comma-separated keywords to highlight important entries:
 | Whisper AI | Good | Free | Local (browser) |
 | Deepgram | Excellent | ~$0.0043/min | Cloud API |
 
-**Deepgram** uses the `nova-3` model with 54% lower word error rate than Nova-2, plus expanded keyword boosting for police/scanner terminology (80+ domain terms).
+**Deepgram** uses the `nova-2-phonecall` model optimized for radio/phone audio, plus expanded keyword boosting for police/scanner terminology (80+ domain terms).
 
 ## Export Formats
 
@@ -76,7 +76,7 @@ Enter comma-separated keywords to highlight important entries:
 
 - **Audio Capture:** `getDisplayMedia()` API for tab audio (desktop browsers only)
 - **Whisper:** `whisper-small.en` model via [Transformers.js](https://huggingface.co/docs/transformers.js) with police/scanner vocabulary prompts
-- **Deepgram:** WebSocket streaming with `nova-3` model (54% lower WER), 80+ keyword boosters for police/scanner terms
+- **Deepgram:** WebSocket streaming with `nova-2-phonecall` model, 80+ keyword boosters for police/scanner terms
 - **Numeric Normalization:** Post-processing fixes spaced digits, +1 hallucinations, 10-codes, license plates, and CAD numbers
 - **Database:** IndexedDB for session and transcript storage with full-text search
 - **Storage:** localStorage for settings persistence
