@@ -52,6 +52,35 @@
                 </div>
             </section>
 
+            <section class="transcript-section">
+                <div class="transcript-header">
+                    <h3>Live Transcript</h3>
+                    <div class="transcript-controls">
+                        <button id="start-transcription" class="btn btn-primary">
+                            Start Transcription
+                        </button>
+                        <button id="stop-transcription" class="btn btn-secondary" disabled>
+                            Stop
+                        </button>
+                        <button id="clear-transcript" class="btn btn-secondary">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                <div class="transcript-status" id="transcript-status">
+                    <span class="mic-indicator"></span>
+                    <span class="mic-status-text">Microphone Off</span>
+                </div>
+                <div class="transcript-container" id="transcript-container">
+                    <p class="transcript-placeholder">
+                        Click "Start Transcription" to begin. Make sure your microphone can hear the scanner audio.
+                    </p>
+                </div>
+                <div class="transcript-note">
+                    <strong>Tip:</strong> Play the scanner through speakers and position your microphone nearby for best results.
+                </div>
+            </section>
+
             <section class="info-section">
                 <h3>About This Feed</h3>
                 <p>
@@ -63,15 +92,6 @@
                     <li><strong>Coverage:</strong> Police, Fire, EMS</li>
                     <li><strong>Source:</strong> Broadcastify</li>
                 </ul>
-            </section>
-
-            <section class="instructions">
-                <h3>How to Listen</h3>
-                <ol>
-                    <li>Click the play button in the player above</li>
-                    <li>If the player doesn't load, click "Open in Broadcastify"</li>
-                    <li>You may need to create a free Broadcastify account</li>
-                </ol>
             </section>
         </main>
 

@@ -162,8 +162,132 @@ main {
     transform: translateY(-2px);
 }
 
-.info-section,
-.instructions {
+/* Transcript Section */
+.transcript-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--border-radius);
+    padding: 24px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.transcript-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.transcript-header h3 {
+    font-size: 1.2rem;
+    margin: 0;
+}
+
+.transcript-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.transcript-controls .btn {
+    flex: 0;
+    min-width: auto;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    border: none;
+    cursor: pointer;
+}
+
+.transcript-controls .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.transcript-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--border-radius);
+    font-size: 0.85rem;
+}
+
+.mic-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #666;
+}
+
+.transcript-status.listening .mic-indicator {
+    background-color: var(--accent-color);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.mic-status-text {
+    color: var(--text-muted);
+}
+
+.transcript-container {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--border-radius);
+    padding: 16px;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.8;
+}
+
+.transcript-placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.transcript-entry {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.transcript-entry:last-child {
+    border-bottom: none;
+}
+
+.transcript-time {
+    color: var(--accent-color);
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+.transcript-text {
+    color: var(--text-color);
+}
+
+.transcript-text.interim {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.transcript-note {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(233, 69, 96, 0.1);
+    border-radius: var(--border-radius);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.transcript-note strong {
+    color: var(--accent-color);
+}
+
+.info-section {
     background: rgba(255, 255, 255, 0.03);
     border-radius: var(--border-radius);
     padding: 20px;
