@@ -592,10 +592,12 @@ function initializeTranscriptionControls() {
     const startBtn = document.getElementById('start-transcription');
     const stopBtn = document.getElementById('stop-transcription');
     const clearBtn = document.getElementById('clear-transcript');
+    const downloadBtn = document.getElementById('download-transcript');
 
     startBtn.addEventListener('click', startTranscription);
     stopBtn.addEventListener('click', stopTranscription);
     clearBtn.addEventListener('click', clearTranscript);
+    downloadBtn.addEventListener('click', downloadTranscript);
 }
 
 function startTranscription() {
@@ -688,6 +690,53 @@ function clearTranscript() {
             Select an engine, capture tab audio, then start transcription.
         </p>
     `;
+}
+
+function downloadTranscript() {
+    const container = document.getElementById('transcript-container');
+    const entries = container.querySelectorAll('.transcript-entry');
+
+    if (entries.length === 0) {
+        alert('No transcript to download.');
+        return;
+    }
+
+    // Build text content
+    let content = 'Baltimore Scanner Transcript\n';
+    content += `Downloaded: ${new Date().toLocaleString()}\n`;
+    content += `Engine: ${currentEngine === 'whisper' ? 'Whisper AI' : 'Deepgram'}\n`;
+    content += '='.repeat(50) + '\n\n';
+
+    entries.forEach(entry => {
+        const time = entry.querySelector('.transcript-time')?.textContent || '';
+        const text = entry.querySelector('.transcript-text')?.textContent || '';
+        content += `${time} ${text}\n`;
+    });
+
+    // Add usage stats if available
+    if (totalSessionSeconds > 0 || sessionStartTime) {
+        let seconds = totalSessionSeconds;
+        if (sessionStartTime) {
+            seconds += Math.floor((Date.now() - sessionStartTime) / 1000);
+        }
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        const cost = (seconds / 60 * 0.0043).toFixed(4);
+        content += '\n' + '='.repeat(50) + '\n';
+        content += `Session Duration: ${minutes}:${secs.toString().padStart(2, '0')}\n`;
+        content += `Estimated Cost: ~$${cost}\n`;
+    }
+
+    // Create and download file
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `baltimore-scanner-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function escapeHtml(text) {
