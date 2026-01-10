@@ -6,25 +6,30 @@ Real-time browser-based transcription for any audio source. Works with police sc
 
 - **Dual Transcription Engines**
   - **Whisper AI** - Free, runs locally in browser (~150MB model)
-  - **Deepgram** - Highly accurate, cloud-based ($200 free credit)
+  - **Deepgram** - Optimized for radio/phone audio ($200 free credit)
 - **Any Audio Source** - Works with any Broadcastify feed or browser tab
-- **Keyword Alerts** - Highlight and notify on specific words (shooting, fire, etc.)
+- **Keyword Alerts** - Highlight and get audio alerts on specific words
 - **Tab Audio Capture** - Capture audio directly from any browser tab
 - **Audio Visualizer** - Real-time frequency visualization
-- **Usage Tracking** - Monitor transcription time and estimated cost
+- **Usage Tracking** - Monitor transcription time and estimated cost (Deepgram)
 - **Multi-Format Export** - Download transcripts as TXT, JSON, or CSV
-- **Settings Persistence** - Saves feed ID, API key, and keywords to localStorage
+- **Settings Persistence** - Saves feed ID, API key, and keywords locally
 
 ## How to Use
 
-1. Enter a Broadcastify feed ID and click "Open Feed", or open any audio source in another tab
-2. Click **"Capture Tab Audio"** and select the tab (check "Share tab audio")
-3. Choose your transcription engine:
-   - **Whisper:** Click "Load Model" (one-time ~150MB download)
-   - **Deepgram:** Enter your API key ([get $200 free credit](https://console.deepgram.com/signup))
-4. (Optional) Enter keywords to highlight in transcripts
-5. Click **"Start"** to begin transcription
-6. Download transcripts as TXT, JSON, or CSV
+### 1. Audio Source
+- Enter a Broadcastify feed ID and click "Open Feed", or open any audio source in another tab
+- Click **"Capture Tab Audio"** and select the tab (check "Share tab audio")
+
+### 2. Transcription Setup
+- Choose your engine:
+  - **Whisper:** Click "Load Model" (one-time ~150MB download)
+  - **Deepgram:** Enter your API key ([get $200 free credit](https://console.deepgram.com/signup))
+- (Optional) Enter keywords to highlight in transcripts
+
+### 3. Live Transcript
+- Click **"Start"** to begin transcription
+- Download transcripts as TXT, JSON, or CSV
 
 ## Live Demo
 
@@ -53,9 +58,9 @@ Enter comma-separated keywords to highlight important entries:
 | Engine | Accuracy | Cost | Processing |
 |--------|----------|------|------------|
 | Whisper AI | Good | Free | Local (browser) |
-| Deepgram Nova-2 | Excellent | ~$0.0043/min | Cloud API |
+| Deepgram | Excellent | ~$0.0043/min | Cloud API |
 
-**Deepgram** is recommended for police scanner audio due to better handling of radio noise.
+**Deepgram** uses the `nova-2-phonecall` model, optimized for radio and phone audio quality.
 
 ## Export Formats
 
@@ -67,7 +72,7 @@ Enter comma-separated keywords to highlight important entries:
 
 - **Audio Capture:** `getDisplayMedia()` API for tab audio
 - **Whisper:** `whisper-base.en` model via [Transformers.js](https://huggingface.co/docs/transformers.js)
-- **Deepgram:** WebSocket streaming to Nova-2 model
+- **Deepgram:** WebSocket streaming with utterance grouping
 - **Storage:** localStorage for settings persistence
 
 ## Privacy
@@ -75,12 +80,6 @@ Enter comma-separated keywords to highlight important entries:
 - **Whisper:** All processing happens locally in your browser
 - **Deepgram:** Audio is sent to Deepgram's servers for processing
 - **No tracking:** No analytics or third-party tracking
-
-## Files
-
-- `index.html` - Main page structure
-- `styles.css` - Dark theme styling
-- `app.js` - Audio capture, transcription engines, and UI logic
 
 ## Disclaimer
 
