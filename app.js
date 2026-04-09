@@ -615,49 +615,101 @@ async function startAudioCapture() {
 
         const audioTracks = mediaStream.getAudioTracks();
         if (audioTracks.length === 0) {
-            throw new Error('No audio track. Check "Share tab audio" when selecting.');
+            throw new Error('No audio track. Make sure to check "Share tab audio".');
         }
 
-        // Stop video track
+        // Stop video track immediately (we only want audio)
         mediaStream.getVideoTracks().forEach(track => track.stop());
 
-        // Set up audio context for visualization only
+        // === IMPROVED AUDIO TRACK MONITORING ===
+        const audioTrack = audioTracks[0];
+
+        // Listen for when the track ends (common after a few minutes)
+        audioTrack.addEventListener('ended', () => {
+            console.warn('Audio track ended unexpectedly');
+            handleAudioTrackEnded();
+        });
+
+        // Also watch for mute/unmute (sometimes Chrome mutes instead of ending)
+        audioTrack.addEventListener('mute', () => {
+            console.warn('Audio track muted');
+            // Optional: you can treat mute as a warning too
+        });
+
+        audioTrack.addEventListener('unmute', () => {
+            console.log('Audio track unmuted');
+        });
+
+        // Set up audio context for visualization
         audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         const source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
-
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
-
-        // Only connect to analyser for visualization - NO playback
         source.connect(analyser);
 
-        // Set up MediaRecorder for transcription
+        // Set up recorders/processors
         setupMediaRecorders(audioTracks);
 
         isCapturing = true;
-
         captureBtn.disabled = true;
         stopBtn.disabled = false;
         updateStatus(statusElement, true, 'Capturing Audio');
 
-        // Enable transcription button based on engine readiness
-        updateTranscriptionButtonState();
-
         visualize();
-
-        audioTracks[0].addEventListener('ended', stopAudioCapture);
-
         updateTranscriptStatus('Audio captured. Start transcription when ready.');
 
     } catch (error) {
         console.error('Error capturing audio:', error);
         updateStatus(statusElement, false, 'Capture Failed');
+        alert(error.name === 'NotAllowedError' 
+            ? 'Permission denied. Please allow tab sharing.' 
+            : `Error: ${error.message}\n\nMake sure to check "Share tab audio".`);
+    }
+}
 
-        if (error.name === 'NotAllowedError') {
-            alert('Permission denied. Please allow screen/tab sharing.');
-        } else {
-            alert(`Error: ${error.message}\n\nMake sure to check "Share tab audio" when selecting the tab.`);
-        }
+// New helper function - called when track ends
+function handleAudioTrackEnded() {
+    isCapturing = false;
+    
+    const statusElement = document.getElementById('status');
+    updateStatus(statusElement, false, 'Audio Stopped');
+
+    // Stop processors and visualization
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    // Show a clear, non-blocking re-share prompt
+    showReSharePrompt();
+}
+
+function showReSharePrompt() {
+    // Create a friendly banner if it doesn't exist yet
+    let banner = document.getElementById('audio-reconnect-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'audio-reconnect-banner';
+        banner.style.cssText = `
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #ff9800; color: white; padding: 12px 20px; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10000; font-weight: bold;
+            display: flex; align-items: center; gap: 12px;
+        `;
+        banner.innerHTML = `
+            <span>🔇 Audio capture stopped</span>
+            <button id="re-share-btn" style="background:white; color:#ff9800; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">
+                Re-share Tab Audio
+            </button>
+            <button onclick="this.parentElement.remove()" style="background:transparent; border:none; color:white; cursor:pointer;">✕</button>
+        `;
+        document.body.appendChild(banner);
+
+        document.getElementById('re-share-btn').addEventListener('click', () => {
+            banner.remove();
+            // Restart capture automatically (will show the share dialog again)
+            startAudioCapture();
+        });
     }
 }
 
