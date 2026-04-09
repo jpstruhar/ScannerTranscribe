@@ -36,7 +36,7 @@ Real-time browser-based transcription for any audio source. Works with police sc
 
 ## Live Demo
 
-Visit: https://arandomguyhere.github.io/ScannerTranscribe/
+Visit: https://jpstruhar.github.io/ScannerTranscribe/
 
 ## Finding Feeds
 
